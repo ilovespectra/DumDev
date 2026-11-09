@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0b1018">
+  <meta name="description" content="DumDev is a local X automation bot that finds relevant conversations and publishes posts and contextual replies within limits you set.">
+  <title>DumDev — Local X automation</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0b1018; --panel:#111a26; --line:#253449; --text:#eef4fc; --muted:#a8b6c9; --cyan:#72e5d0; --blue:#94b5ff; --warn:#ffcf83; }
+    * { box-sizing: border-box; }
+    body { margin:0; min-height:100vh; color:var(--text); background:radial-gradient(ellipse at 75% 0%,#182c3d 0,transparent 38rem),var(--bg); font:16px/1.55 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    .wrap { width:min(1080px,calc(100% - 40px)); margin:auto; }
+    header { height:68px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #ffffff13; }
+    .brand { display:flex; align-items:center; gap:11px; font-weight:760; letter-spacing:.02em; }
+    .mark { display:grid; place-items:center; width:34px; height:34px; border:1px solid #72e5d066; border-radius:11px; color:var(--cyan); background:#72e5d011; font-size:19px; }
+    .label { color:var(--muted); font-size:12px; letter-spacing:.13em; text-transform:uppercase; }
+    main { padding:48px 0 50px; }
+    .hero { max-width:980px; }
+    .eyebrow { display:inline-flex; align-items:center; gap:9px; color:var(--cyan); font-size:12px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; }
+    .dot { width:7px; height:7px; border-radius:50%; background:var(--cyan); box-shadow:0 0 15px #72e5d099; }
+    h1 { margin:16px 0 12px; max-width:980px; font-size:clamp(42px,7vw,72px); line-height:1.02; letter-spacing:-.055em; }
+    .lead { max-width:700px; color:#c1cedd; font-size:clamp(17px,2.2vw,21px); line-height:1.55; }
+    .chips { display:flex; flex-wrap:wrap; gap:9px; margin:22px 0 24px; }
+    .chip { padding:7px 12px; border:1px solid var(--line); border-radius:999px; color:#c6d3e2; background:#111a268c; font-size:13px; }
+    .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:30px; }
+    .card { min-height:135px; padding:21px; border:1px solid var(--line); border-radius:17px; background:linear-gradient(145deg,#152131e8,#0e1621e8); }
+    .num { color:var(--blue); font-size:12px; font-weight:700; letter-spacing:.12em; }
+    h2 { margin:12px 0 6px; font-size:17px; }
+    .card p { margin:0; color:var(--muted); font-size:14px; }
+    .fine { margin:14px 2px 0; color:#9aabc0; font-size:13px; }
+    .status { margin-top:24px; padding:16px 18px; border:1px solid #81633c; border-radius:15px; background:linear-gradient(110deg,#3b2d1b70,#161b21b8); }
+    .status strong { display:block; margin-bottom:4px; color:var(--warn); }
+    .status p { margin:0; color:#e4d7c3; font-size:14px; }
+    footer { padding:22px 0 30px; border-top:1px solid #ffffff13; color:#92a2b7; font-size:13px; }
+    footer strong { color:#c4d1df; }
+    @media (max-width:720px) { .wrap { width:min(100% - 28px,560px); } main { padding:54px 0 44px; } .grid { grid-template-columns:1fr; margin-top:32px; } .card { min-height:0; } header { height:66px; } }
+    @media (prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior:auto !important; animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand"><span class="mark" aria-hidden="true">D</span><span>DumDev</span></div>
+      <span class="label">Local X automation</span>
+    </header>
+    <main>
+      <section class="hero" aria-labelledby="headline">
+        <div class="eyebrow"><span class="dot" aria-hidden="true"></span> X automation · local first</div>
+        <h1 id="headline">Your local X automation bot.</h1>
+        <p class="lead">DumDev finds relevant conversations and can publish posts and contextual replies through a browser you choose—with a local AI model and the limits you set.</p>
+        <div class="chips" aria-label="Product highlights">
+          <span class="chip">Runs on your Mac</span>
+          <span class="chip">Local Ollama model</span>
+          <span class="chip">Your account, your limits</span>
+        </div>
+      </section>
+      <section class="grid" aria-label="How DumDev works">
+        <article class="card"><span class="num">01 / FIND</span><h2>Search relevant posts</h2><p>Discover conversations around the topics you configure.</p></article>
+        <article class="card"><span class="num">02 / RESPOND</span><h2>Ground replies in context</h2><p>Read the selected post and thread before composing a response.</p></article>
+        <article class="card"><span class="num">03 / MONITOR</span><h2>See the bot’s state</h2><p>Use the local dashboard for activity, status, errors, and recovery.</p></article>
+      </section>
+      <p class="fine">Arc supports search and contextual replies with visible foreground control. Brave and Chrome support standalone posts only. Configured posts and replies can publish automatically; per-draft review is optional.</p>
+      <aside class="status" aria-label="Release status">
+        <strong>No ready download — do not install or share version 0.3.0.</strong>
+        <p>0.3.0 carries the wrong Cruise Control identity. The 0.3.1 correction has not been verified as a package, so no download is offered here.</p>
+      </aside>
+    </main>
+    <footer><strong>DumDev is the X bot.</strong> Cruise Control is a separate HeyClicky companion.</footer>
+  </div>
+</body>
+</html>
