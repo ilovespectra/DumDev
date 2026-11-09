@@ -1,0 +1,11 @@
+{
+  "name": "twitter-agent",
+  "private": true,
+  "scripts": {
+    "dev": ".venv/bin/python -u app.py",
+    "stop": "bash stop-twitter-agent.sh",
+    "test": ".venv/bin/python -m unittest discover",
+    "release:console": ".venv/bin/python dumdev-dev-console/dev_console.py",
+    "release:build": ".venv/bin/python -c \"from pathlib import Path; from release_tools import build_release; from runtime_paths import VERSION; build_release(Path.cwd(), VERSION)\""
+  }
+}

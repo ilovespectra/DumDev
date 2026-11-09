@@ -30,9 +30,11 @@
     h2 { margin:12px 0 6px; font-size:17px; }
     .card p { margin:0; color:var(--muted); font-size:14px; }
     .fine { margin:14px 2px 0; color:#9aabc0; font-size:13px; }
-    .status { margin-top:24px; padding:16px 18px; border:1px solid #81633c; border-radius:15px; background:linear-gradient(110deg,#3b2d1b70,#161b21b8); }
-    .status strong { display:block; margin-bottom:4px; color:var(--warn); }
-    .status p { margin:0; color:#e4d7c3; font-size:14px; }
+    .status { margin-top:24px; padding:18px; border:1px solid #386d64; border-radius:15px; background:linear-gradient(110deg,#16453e77,#111b23d9); }
+    .status strong { display:block; margin-bottom:4px; color:var(--cyan); }
+    .status p { margin:0; color:#d2e5e4; font-size:14px; }
+    .download { display:inline-flex; margin-top:14px; padding:10px 15px; border-radius:10px; background:var(--cyan); color:#071a1a; font-weight:750; text-decoration:none; }
+    .checksum { margin-top:10px !important; color:var(--muted) !important; font-size:12px !important; overflow-wrap:anywhere; }
     footer { padding:22px 0 30px; border-top:1px solid #ffffff13; color:#92a2b7; font-size:13px; }
     footer strong { color:#c4d1df; }
     @media (max-width:720px) { .wrap { width:min(100% - 28px,560px); } main { padding:54px 0 44px; } .grid { grid-template-columns:1fr; margin-top:32px; } .card { min-height:0; } header { height:66px; } }
@@ -62,12 +64,40 @@
         <article class="card"><span class="num">03 / MONITOR</span><h2>See the bot’s state</h2><p>Use the local dashboard for activity, status, errors, and recovery.</p></article>
       </section>
       <p class="fine">Arc supports search and contextual replies with visible foreground control. Brave and Chrome support standalone posts only. Configured posts and replies can publish automatically; per-draft review is optional.</p>
-      <aside class="status" aria-label="Release status">
-        <strong>No ready download — do not install or share version 0.3.0.</strong>
-        <p>0.3.0 carries the wrong Cruise Control identity. The 0.3.1 correction has not been verified as a package, so no download is offered here.</p>
+      <aside class="status" aria-label="Release status" aria-live="polite">
+        <strong id="release-title">Checking the latest verified release…</strong>
+        <p id="release-copy">DumDev only offers packages with a verified release manifest.</p>
+        <div id="release-details" hidden>
+          <a id="download-link" class="download" href="#">Download DumDev for Apple silicon</a>
+          <p id="release-checksum" class="checksum"></p>
+        </div>
       </aside>
     </main>
     <footer><strong>DumDev is the X bot.</strong> Cruise Control is a separate HeyClicky companion.</footer>
   </div>
+  <script>
+    (async () => {
+      const title = document.getElementById('release-title');
+      const copy = document.getElementById('release-copy');
+      try {
+        const response = await fetch('/downloads/dumdev/latest.json', {cache: 'no-store'});
+        if (!response.ok) throw new Error('Release feed unavailable');
+        const release = await response.json();
+        const filename = `DumDev-${release.version}-macOS-arm64.zip`;
+        const expected = `${location.origin}/downloads/dumdev/${filename}`;
+        if (!/^\d+\.\d+\.\d+$/.test(release.version) ||
+            release.file !== filename || release.download_url !== expected ||
+            !/^[a-f0-9]{64}$/.test(release.sha256)) throw new Error('Invalid release manifest');
+        title.textContent = `DumDev ${release.version} is ready to download`;
+        copy.textContent = 'A verified Apple silicon package is available. Install Ollama, then follow the setup steps in the app.';
+        document.getElementById('download-link').href = release.download_url;
+        document.getElementById('release-checksum').textContent = `SHA-256: ${release.sha256}`;
+        document.getElementById('release-details').hidden = false;
+      } catch (_) {
+        title.textContent = 'The next verified DumDev download is being prepared.';
+        copy.textContent = 'This page will offer the download as soon as its package and update manifest are published.';
+      }
+    })();
+  </script>
 </body>
 </html>

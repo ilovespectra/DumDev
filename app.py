@@ -1,353 +1,313 @@
-#!/usr/bin/env python3
-"""DumDev: local-only, human-reviewed social post drafting companion."""
+"""Own the dashboard, setup/login sessions, and one configured agent worker."""
 from __future__ import annotations
 
 import json
 import os
-import re
-import socket
+from pathlib import Path
+import signal
 import subprocess
 import sys
 import threading
-import urllib.error
-import urllib.request
+import time
 import webbrowser
-import release_tools
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
-from typing import Any
+from http.server import ThreadingHTTPServer
+from runtime_paths import DATA_ROOT, LOGS, PACKAGED, ROOT, VERSION, python_command
 
-VERSION = "0.2.0"
-HOST = "127.0.0.1"
-PORT = int(os.environ.get("DUMDEV_PORT", "8766"))
-OLLAMA = "http://127.0.0.1:11434"
-RESOURCE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
-WEB_ROOT = RESOURCE_DIR / "web"
-ASSET_ROOT = RESOURCE_DIR / "assets"
-DATA_DIR = Path(os.environ.get("DUMDEV_DATA_DIR", str(Path.home() / "Library" / "Application Support" / "DumDev")))
-CONFIG_PATH = DATA_DIR / "config.json"
-BROWSERS = {"Safari": "Safari", "Chrome": "Google Chrome", "Brave": "Brave Browser", "Arc": "Arc", "Firefox": "Firefox"}
-CADENCE_HOURS = {"1 day": 24, "2 days": 48, "3 days": 72, "1 week": 168}
-DEFAULT_CONFIG: dict[str, Any] = {
-    "setup_complete": False,
-    "browser": "",
-    "model": "",
-    "topics": [],
-    "voice": "",
-    "cadence": "1 day",
-}
-_state_lock = threading.Lock()
-_state: dict[str, Any] = {"paused": False, "generating": False, "last_error": ""}
-_active_stop: threading.Event | None = None
+import monitor_server
+from onboarding import (BROWSERS, DEFAULT_VOICE, has_account_history, open_setup_destination,
+                        MODEL, model_status, permission_status, read_settings, setup_required, validate_setup,
+                        verify_arc_account, write_settings)
 
 
-def _secure_data_dir() -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
-    try:
-        DATA_DIR.chmod(0o700)
-    except OSError:
-        pass
+class Application:
+    def __init__(self, root: Path = DATA_ROOT):
+        self.root = root
+        self.logs = root / "logs"
+        self.settings_path = self.logs / "settings.json"
+        self.worker = None
+        self.login = None
+        self.worker_log = None
+        self.login_log = None
+        self.lock = threading.RLock()
+        self.editing = False
+        self.verified = None
+        self.updates = {"current_version": VERSION, "available": False, "state": "not_checked"}
+        self.update_lock = threading.Lock()
+        self.model_download = {"state": "idle"}
 
-
-def load_config() -> dict[str, Any]:
-    config = dict(DEFAULT_CONFIG)
-    try:
-        stored = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-        if isinstance(stored, dict):
-            config.update(validate_config(stored))
-    except (OSError, json.JSONDecodeError, ValueError, TypeError):
-        pass
-    return config
-
-
-def validate_config(raw: dict[str, Any], merge: bool = False) -> dict[str, Any]:
-    allowed = set(DEFAULT_CONFIG)
-    if not isinstance(raw, dict) or set(raw) - allowed:
-        raise ValueError("Unexpected settings field.")
-    source = {**(load_config() if merge else DEFAULT_CONFIG), **raw}
-    browser = source.get("browser", "")
-    if browser not in ("", *BROWSERS.keys()):
-        raise ValueError("Choose a listed browser.")
-    model = str(source.get("model", "")).strip()
-    if len(model) > 100 or (model and not re.fullmatch(r"[A-Za-z0-9._:/-]+", model)):
-        raise ValueError("Use a valid local Ollama model name.")
-    topics = source.get("topics", [])
-    if isinstance(topics, str):
-        topics = [item.strip() for item in re.split(r"[,\n]", topics) if item.strip()]
-    if not isinstance(topics, list) or len(topics) > 12 or any(not isinstance(x, str) or len(x.strip()) > 60 for x in topics):
-        raise ValueError("Add up to 12 short topic keywords.")
-    topics = [item.strip() for item in topics if item.strip()]
-    voice = str(source.get("voice", "")).strip()
-    if len(voice) > 500:
-        raise ValueError("Voice notes must be 500 characters or fewer.")
-    cadence = source.get("cadence", "1 day")
-    if cadence not in CADENCE_HOURS:
-        raise ValueError("Choose a listed drafting cadence.")
-    complete = source.get("setup_complete", False)
-    if not isinstance(complete, bool):
-        raise ValueError("Setup status must be a boolean.")
-    if complete and not model:
-        raise ValueError("Install Ollama, download a local model, and choose it before finishing setup.")
-    return {"setup_complete": complete, "browser": browser, "model": model,
-            "topics": topics, "voice": voice, "cadence": cadence}
-
-
-def save_config(raw: dict[str, Any]) -> dict[str, Any]:
-    config = validate_config(raw, merge=True)
-    _secure_data_dir()
-    temp = CONFIG_PATH.with_suffix(".tmp")
-    temp.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    try:
-        temp.chmod(0o600)
-    except OSError:
-        pass
-    temp.replace(CONFIG_PATH)
-    return config
-
-
-def ollama_models() -> list[str]:
-    req = urllib.request.Request(f"{OLLAMA}/api/tags", headers={"Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=3) as response:
-        data = json.loads(response.read(1_000_000).decode("utf-8"))
-    return [item["name"] for item in data.get("models", []) if isinstance(item, dict) and isinstance(item.get("name"), str)][:100]
-
-
-def build_prompt(config: dict[str, Any], context: str) -> str:
-    topics = ", ".join(config["topics"]) or "(no topic keywords supplied)"
-    voice = config["voice"] or "Clear, warm, concise, and recognizably your own."
-    return (
-        "You are DumDev, a local writing assistant. Write exactly one concise draft for a human to review; do not publish or claim it was sent. "
-        "Use only the details supplied below. Do not invent personal experience, facts, endorsements, or quotes. Do not imitate a real person, "
-        "manufacture engagement, or suggest evading platform rules. If details are insufficient, ask for clarification instead of making claims. "
-        "Return only the draft text, without quotation marks or commentary.\n\n"
-        f"User's voice notes: {voice}\n"
-        f"Topic keywords: {topics}\n"
-        "Do not mention schedules, cadence, or app features unless the user explicitly asks in the notes.\n"
-        f"Notes supplied for this draft: {context.strip()}"
-    )
-
-
-def open_x_login(browser: str) -> None:
-    if not isinstance(browser, str) or browser not in BROWSERS:
-        raise ValueError("Choose a browser in Settings first.")
-    if os.environ.get("DUMDEV_TESTING") == "1":
-        return
-    if sys.platform != "darwin":
-        raise RuntimeError("Automatic browser launching is available on macOS; open x.com manually on this device.")
-    result = subprocess.run(["open", "-a", BROWSERS[browser], "https://x.com/i/flow/login"],
-                            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
-                            timeout=8, check=False)
-    if result.returncode != 0:
-        raise RuntimeError(f"Could not open {browser}. Check that it is installed, then open x.com manually.")
-
-
-class DumDevHandler(SimpleHTTPRequestHandler):
-    server_version = f"DumDev/{VERSION}"
-
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, directory=str(WEB_ROOT), **kwargs)
-
-    def log_message(self, _format: str, *_args: Any) -> None:
-        # Keep request bodies, prompts, and local settings out of logs.
-        return
-
-    def _valid_host(self) -> bool:
-        port = self.server.server_port
-        host = self.headers.get("Host", "").lower()
-        return host in {f"127.0.0.1:{port}", f"localhost:{port}"}
-
-    def end_headers(self) -> None:
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Referrer-Policy", "no-referrer")
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
-        self.send_header("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
-        super().end_headers()
-
-    def do_GET(self) -> None:
-        if not self._valid_host():
-            return self._json(403, {"error": "Use the local DumDev address."})
-        if self.path == "/api/health":
-            with _state_lock:
-                payload = {"ok": True, "version": VERSION, **_state}
-            return self._json(200, payload)
-        if self.path == "/api/config":
-            return self._json(200, load_config())
-        if self.path == "/api/models":
-            try:
-                return self._json(200, {"models": ollama_models()})
-            except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError, TypeError):
-                return self._json(503, {"error": "Ollama is not responding at 127.0.0.1:11434. Open Ollama and try again."})
-        if self.path == "/api/release-status" and os.environ.get("DUMDEV_DEVELOPER_MODE") == "1":
-            latest = release_tools.latest_release()
-            base_version = latest["version"] if latest and release_tools.version_tuple(str(latest["version"])) > release_tools.version_tuple(VERSION) else VERSION
-            return self._json(200, {"version": VERSION, "next_version": release_tools.next_patch(str(base_version)),
-                                    "latest": latest})
-        if self.path.startswith("/api/release-file/") and os.environ.get("DUMDEV_DEVELOPER_MODE") == "1":
-            name = self.path.removeprefix("/api/release-file/")
-            if not re.fullmatch(r"DumDev-[0-9]+\.[0-9]+\.[0-9]+-macOS-arm64\.zip", name):
-                return self._json(404, {"error": "Not found."})
-            return self._send_file(release_tools.RELEASE_DIR / name, "application/zip")
-        if self.path.startswith("/assets/"):
-            name = self.path.removeprefix("/assets/")
-            if name not in {"dumdev-mark.svg"}:
-                return self._json(404, {"error": "Not found."})
-            return self._send_file(ASSET_ROOT / name, "image/svg+xml; charset=utf-8")
-        if self.path == "/" or self.path == "/index.html":
-            return self._send_file(WEB_ROOT / "index.html", "text/html; charset=utf-8")
-        return self._json(404, {"error": "Not found."})
-
-    def do_POST(self) -> None:
-        if not self._valid_host():
-            return self._json(403, {"error": "Use the local DumDev address."})
-        origin = self.headers.get("Origin")
-        expected = f"http://{HOST}:{self.server.server_port}"
-        if origin and origin not in {expected, f"http://localhost:{self.server.server_port}"}:
-            return self._json(403, {"error": "Requests must come from this local DumDev page."})
+    def check_updates(self):
+        if not self.update_lock.acquire(blocking=False):
+            return
         try:
-            body = self._read_body()
-            if self.path == "/api/config":
-                return self._json(200, save_config(body))
-            if self.path == "/api/ollama-pull":
-                model = body.get("model", "")
-                if not isinstance(model, str) or not re.fullmatch(r"[A-Za-z0-9._:/-]{1,100}", model):
-                    raise ValueError("Enter a model name, for example qwen2.5:3b.")
-                req = urllib.request.Request(f"{OLLAMA}/api/pull", data=json.dumps({"name": model, "stream": False}).encode(),
-                                             headers={"Content-Type": "application/json"}, method="POST")
-                with urllib.request.urlopen(req, timeout=1800) as response:
-                    result = json.loads(response.read(2_000_000).decode("utf-8"))
-                return self._json(200, {"model": model, "status": result.get("status", "success")})
-            if self.path == "/api/build-release" and os.environ.get("DUMDEV_DEVELOPER_MODE") == "1":
-                result = release_tools.build_release(body.get("version", ""))
-                return self._json(200, result)
-            if self.path == "/api/pause":
-                paused = body.get("paused")
-                if not isinstance(paused, bool):
-                    raise ValueError("Pause status must be true or false.")
-                with _state_lock:
-                    _state["paused"] = paused
-                return self._json(200, {"paused": paused})
-            if self.path == "/api/stop":
-                with _state_lock:
-                    active = _active_stop
-                    generating = bool(_state["generating"])
-                    if active:
-                        active.set()
-                    _state["last_error"] = "Generation stopped by you." if generating else ""
-                return self._json(200, {"stopped": generating, "message": "Stop requested. Any draft returned after this request will be discarded."})
-            if self.path == "/api/open-x":
-                browser = body.get("browser") or load_config().get("browser")
-                open_x_login(browser)
-                opened = os.environ.get("DUMDEV_TESTING") != "1"
-                message = ("X login opened in the selected browser. Sign in there yourself; DumDev does not read or control that browser."
-                           if opened else "Test mode: X login would open in the selected browser; no browser was launched.")
-                return self._json(200, {"browser": browser, "opened": opened, "message": message})
-            if self.path == "/api/draft":
-                return self._generate(body)
-            return self._json(404, {"error": "Not found."})
-        except (ValueError, TypeError, json.JSONDecodeError) as exc:
-            return self._json(400, {"error": str(exc)})
-        except (RuntimeError, subprocess.TimeoutExpired) as exc:
-            return self._json(503, {"error": str(exc) or "Could not open the selected browser."})
-        except Exception:
-            return self._json(500, {"error": "DumDev hit a local error. Check Ollama and try again."})
-
-    def _generate(self, body: dict[str, Any]) -> None:
-        global _active_stop
-        context = body.get("context", "")
-        if not isinstance(context, str) or len(context) > 2_000:
-            return self._json(400, {"error": "Draft notes must be 2,000 characters or fewer."})
-        config = load_config()
-        with _state_lock:
-            if _state["paused"]:
-                return self._json(409, {"error": "Drafting is paused. Resume drafting to continue."})
-            if _state["generating"]:
-                return self._json(409, {"error": "A draft is already being generated."})
-            if not config["model"]:
-                return self._json(400, {"error": "Choose an installed Ollama model in setup first."})
-            stop_event = threading.Event()
-            _active_stop = stop_event
-            _state["generating"] = True
-            _state["last_error"] = ""
-        payload = json.dumps({"model": config["model"], "prompt": build_prompt(config, context),
-                              "stream": False, "options": {"temperature": 0.7}}).encode("utf-8")
-        req = urllib.request.Request(f"{OLLAMA}/api/generate", data=payload,
-                                     headers={"Content-Type": "application/json"}, method="POST")
-        try:
-            with urllib.request.urlopen(req, timeout=120) as response:
-                result = json.loads(response.read(2_000_000).decode("utf-8"))
-            draft = result.get("response", "").strip()
-            if stop_event.is_set():
-                return self._json(409, {"error": "Generation stopped; the late result was discarded."})
-            if not draft:
-                return self._json(502, {"error": "Ollama returned an empty draft. Try again or choose another model."})
-            return self._json(200, {"draft": draft, "model": config["model"], "published": False})
-        except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError, TypeError):
-            return self._json(502, {"error": "Ollama could not complete this draft. Check that the local model is installed and try again."})
+            from update_manager import check_update
+            self.updates = {**check_update(), "state": "checked"}
+        except (OSError, ValueError) as exc:
+            self.updates = {"current_version": VERSION, "available": False,
+                            "state": "unavailable", "error": str(exc)}
+            print(f"Update check unavailable: {exc}", file=sys.stderr)
         finally:
-            with _state_lock:
-                _state["generating"] = False
-                if _active_stop is stop_event:
-                    _active_stop = None
+            self.update_lock.release()
 
-    def _read_body(self) -> dict[str, Any]:
-        try:
-            length = int(self.headers.get("Content-Length", "0"))
-        except ValueError as exc:
-            raise ValueError("Invalid request length.") from exc
-        if length < 0 or length > 32_000:
-            raise ValueError("Request is too large.")
-        if self.headers.get_content_type() != "application/json":
-            raise ValueError("Use application/json.")
-        data = json.loads(self.rfile.read(length).decode("utf-8"))
-        if not isinstance(data, dict):
-            raise ValueError("Expected a JSON object.")
-        return data
+    def snapshot(self) -> dict:
+        with self.lock:
+            settings = read_settings(self.settings_path)
+            return {"required": setup_required(settings), "editing": self.editing,
+                    "settings": settings, "default_voice": DEFAULT_VOICE,
+                    "browsers": [{"id": key, "name": name, "installed": Path(path).exists()}
+                                 for key, (name, path) in BROWSERS.items()],
+                    "verified_account": self.verified,
+                    "running": self.worker is not None and self.worker.poll() is None}
 
-    def _send_file(self, path: Path, content_type: str) -> None:
-        try:
-            data = path.read_bytes()
-        except OSError:
-            return self._json(404, {"error": "Not found."})
-        self.send_response(200)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
+    def stop_worker(self) -> None:
+        if self.worker is not None:
+            pid = self.worker.pid
+            if self.worker.poll() is None:
+                self.worker.terminate()
+                try:
+                    self.worker.wait(timeout=15)
+                except subprocess.TimeoutExpired:
+                    raise RuntimeError("The agent is still stopping. Wait before changing setup or starting another session.")
+            self.worker = None
+            path = self.logs / "agent.pid"
+            if path.exists() and path.read_text().strip() == str(pid):
+                path.unlink()
+        if self.worker_log:
+            self.worker_log.close()
+            self.worker_log = None
 
-    def _json(self, status: int, payload: dict[str, Any]) -> None:
-        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
+    def stop_login(self) -> None:
+        if self.login is not None:
+            if self.login.poll() is None:
+                self.login.terminate()
+                self.login.wait(timeout=15)
+            if self.login.stdin:
+                self.login.stdin.close()
+            self.login = None
+        if self.login_log:
+            self.login_log.close()
+            self.login_log = None
+
+    def start_worker(self) -> None:
+        settings = read_settings(self.settings_path)
+        if setup_required(settings):
+            return
+        browser = settings.get("browser", "arc")
+        if browser == "arc":
+            permission_status()
+        command = [*python_command("twitter_agent.py"),
+                   "--settings-file", str(self.settings_path),
+                   "--status-file", str(self.logs / "status.json"), "--loop"]
+        if settings.get("require_review", False):
+            command.append("--require-review")
+        if browser == "arc":
+            command += ["--post-mode", "arc", "--campaign", "--supervise"]
+        else:
+            command += ["--browser", browser, "--campaign", "--supervise",
+                        "--user-data-dir", str(self.root / f"browser-profile-{browser}")]
+        if not settings.get("onboarding_completed"):
+            command += ["--repo", os.environ.get("TWITTER_AGENT_REPO", str(ROOT))]
+        self.worker_log = (self.logs / "twitter-agent.out").open("a", encoding="utf-8")
+        self.worker = subprocess.Popen(command, stdout=self.worker_log, stderr=subprocess.STDOUT)
+        (self.logs / "agent.pid").write_text(str(self.worker.pid), encoding="utf-8")
+
+    def action(self, action: str, payload: dict) -> dict:
+        with self.lock:
+            if action == "begin":
+                self.stop_worker()
+                self.stop_login()
+                self.editing = True
+                self.verified = None
+                from twitter_agent import write_status
+                write_status(str(self.logs / "status.json"), {"state": "setup_required", "error": None,
+                                                            "note": "Agent paused while setup is open."})
+                return self.snapshot()
+            if not self.editing and not setup_required(read_settings(self.settings_path)):
+                raise ValueError("Open setup before changing the automation account.")
+            if action == "save":
+                settings = validate_setup(payload)
+                previous = read_settings(self.settings_path)
+                old_handle = previous.get("account_handle", "")
+                if (old_handle and old_handle.casefold() != settings["account_handle"].casefold()
+                        and has_account_history(self.logs)):
+                    raise ValueError("This installation has history or approvals for another account. Use a separate installation for a different account; history cannot be reassigned.")
+                from approval_queue import read_request
+                request = read_request(self.logs / "status.json")
+                if request and request["kind"] == "reply" and settings["browser"] != "arc":
+                    raise ValueError("Review or reject the saved reply in Arc before switching to a posting-only browser.")
+                if not Path(BROWSERS[settings["browser"]][1]).exists():
+                    raise ValueError("Install the selected browser before continuing.")
+                self.stop_login()
+                self.verified = None
+                previous.update(settings)
+                previous["setup_in_progress"] = True
+                write_settings(self.settings_path, previous)
+                return {"ok": True}
+            settings = read_settings(self.settings_path)
+            browser = settings.get("browser")
+            handle = settings.get("account_handle")
+            if action in {"login", "verify", "complete"} and (browser not in BROWSERS or not handle):
+                raise ValueError("Save your browser and account details first.")
+            if action == "permission":
+                open_setup_destination(payload.get("destination"))
+                return {"ok": True}
+            if action == "model":
+                return {**model_status(), "download": self.model_download}
+            if action == "model-download":
+                if self.model_download["state"] == "downloading":
+                    return {"ok": True}
+                from urllib.request import Request, urlopen
+
+                def download():
+                    try:
+                        request = Request("http://127.0.0.1:11434/api/pull",
+                                          data=json.dumps({"name": MODEL, "stream": False}).encode(),
+                                          headers={"Content-Type": "application/json"})
+                        with urlopen(request, timeout=1200) as response:
+                            result = json.load(response)
+                        if result.get("status") != "success":
+                            raise ValueError("Ollama did not confirm a successful model download.")
+                        self.model_download = {"state": "complete"}
+                    except (OSError, ValueError) as exc:
+                        self.model_download = {"state": "error", "error": str(exc)}
+                        print(f"Model download failed: {exc}", file=sys.stderr)
+
+                self.model_download = {"state": "downloading"}
+                threading.Thread(target=download, daemon=True).start()
+                return {"ok": True}
+            if action == "permissions":
+                return {"permissions": permission_status() if browser == "arc" else {}}
+            if action == "login":
+                if browser == "arc":
+                    subprocess.run(["open", "-a", "Arc", "https://x.com/login"],
+                                   check=True, capture_output=True, text=True, timeout=10)
+                else:
+                    if self.login is not None and self.login.poll() is None:
+                        return {"ok": True, "note": "Login window is already open."}
+                    self.stop_login()
+                    self.login_log = (self.logs / "setup-login.out").open("a", encoding="utf-8")
+                    self.login = subprocess.Popen(
+                        [*python_command("twitter_agent.py"), "--login",
+                         "--browser", browser, "--user-data-dir", str(self.root / f"browser-profile-{browser}"),
+                         "--settings-file", str(self.settings_path), "--status-file", str(self.logs / "status.json")],
+                        stdin=subprocess.PIPE, stdout=self.login_log, stderr=subprocess.STDOUT, text=True)
+                return {"ok": True}
+            if action == "verify":
+                self.verified = None
+                if browser == "arc":
+                    verified = verify_arc_account(handle)
+                else:
+                    if self.login is None or self.login.poll() is not None:
+                        raise ValueError("Open the login window first. If it closed, open it again.")
+                    self.login.stdin.write("\n")
+                    self.login.stdin.flush()
+                    code = self.login.wait(timeout=35)
+                    self.stop_login()
+                    status = json.loads((self.logs / "status.json").read_text())
+                    if code or status.get("state") != "login_ready" or str(status.get("account", "")).casefold() != handle.casefold():
+                        raise ValueError("Could not verify the selected X account. Check the login window/account and logs/setup-login.out.")
+                    verified = handle
+                self.verified = {"browser": browser, "handle": verified}
+                return {"ok": True, "account": verified}
+            if action == "complete":
+                if self.verified != {"browser": browser, "handle": handle}:
+                    raise ValueError("Verify the selected signed-in account before finishing.")
+                if browser == "arc":
+                    permissions = permission_status()
+                    if not all(permissions.get(key) for key in ("accessibility", "input", "screen")):
+                        raise ValueError("Grant Accessibility, Input Monitoring, and Screen Recording, then check again.")
+                    verify_arc_account(handle)
+                if not model_status()["ready"]:
+                    raise ValueError("Open Ollama and download the suggested model before finishing setup.")
+                settings.update(validate_setup(settings))
+                settings["onboarding_completed"] = True
+                settings["setup_in_progress"] = False
+                write_settings(self.settings_path, settings)
+                self.start_worker()
+                self.editing = False
+                return {"ok": True}
+            raise ValueError("Unknown setup action.")
+
+    def close(self) -> None:
+        with self.lock:
+            self.stop_worker()
+            self.stop_login()
 
 
-def make_server() -> ThreadingHTTPServer:
-    ThreadingHTTPServer.daemon_threads = True
-    for port in range(PORT, PORT + 15):
-        try:
-            return ThreadingHTTPServer((HOST, port), DumDevHandler)
-        except OSError:
-            continue
-    raise RuntimeError("No available local port in the DumDev range 8766–8780.")
+def main() -> int:
+    root = DATA_ROOT
+    smoke_test = "--smoke-test" in sys.argv
+    application = Application(root)
+    application.logs.mkdir(parents=True, exist_ok=True)
+    if not PACKAGED and not smoke_test:
+        subprocess.run(["bash", str(ROOT / "stop-twitter-agent.sh")], check=True)
+    monitor_server.APPLICATION = application
+    server = ThreadingHTTPServer(("127.0.0.1", 0 if smoke_test else 8765), monitor_server.Handler)
+    (application.logs / "monitor.pid").write_text(str(os.getpid()), encoding="utf-8")
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
 
+    def stop(_signal, _frame):
+        raise KeyboardInterrupt
 
-def main() -> None:
-    server = make_server()
-    url = f"http://{HOST}:{server.server_port}/"
-    print(f"DumDev {VERSION} is running on {url}. Only this Mac can connect.")
-    print("Press Ctrl+C to stop. Drafts are never posted automatically.")
-    if "--no-browser" not in sys.argv and os.environ.get("DUMDEV_TESTING") != "1":
-        webbrowser.open(url)
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, stop)
     try:
-        server.serve_forever(poll_interval=0.25)
+        if smoke_test:
+            from urllib.request import urlopen
+            base = f"http://127.0.0.1:{server.server_port}"
+            with urlopen(base + "/") as response:
+                if b"setup.js" not in response.read():
+                    raise RuntimeError("The bundled dashboard is missing setup resources.")
+            with urlopen(base + "/setup") as response:
+                required = json.load(response)["required"]
+            report = {"version": VERSION, "data_directory": str(root), "setup_required": required}
+            (application.logs / "smoke-test.json").write_text(json.dumps(report), encoding="utf-8")
+            print(json.dumps(report), flush=True)
+            return 0
+        if setup_required(read_settings(application.settings_path)):
+            from twitter_agent import write_status
+            write_status(str(application.logs / "status.json"),
+                         {"state": "setup_required", "note": "Complete guided setup to start.", "error": None})
+        else:
+            application.start_worker()
+        print("Dashboard: http://127.0.0.1:8765\nCtrl+C stops the agent and dashboard.", flush=True)
+        threading.Thread(target=application.check_updates, daemon=True).start()
+        if not webbrowser.open("http://127.0.0.1:8765/"):
+            print("Open the dashboard URL above to continue.", file=sys.stderr)
+        next_check = time.monotonic() + 3600
+        while True:
+            time.sleep(1)
+            if time.monotonic() >= next_check:
+                threading.Thread(target=application.check_updates, daemon=True).start()
+                next_check = time.monotonic() + 3600
     except KeyboardInterrupt:
-        print("\nDumDev stopped.")
+        return 0
     finally:
+        application.close()
+        server.shutdown()
         server.server_close()
+        thread.join()
+        for service in ("agent", "monitor"):
+            path = application.logs / f"{service}.pid"
+            if path.exists() and path.read_text().strip() in {
+                    str(os.getpid()), str(getattr(application.worker, "pid", ""))}:
+                path.unlink()
 
 
 if __name__ == "__main__":
-    main()
+    if PACKAGED and (sys.stdout is None or sys.stderr is None):
+        LOGS.mkdir(parents=True, exist_ok=True)
+        filename = "twitter-agent.out" if "--agent" in sys.argv else "app.out"
+        output = (LOGS / filename).open("a", encoding="utf-8", buffering=1)
+        if sys.stdout is None:
+            sys.stdout = output
+        if sys.stderr is None:
+            sys.stderr = output
+    if "--agent" in sys.argv:
+        sys.argv.remove("--agent")
+        import twitter_agent
+        raise SystemExit(twitter_agent.main())
+    if "--help" in sys.argv or "-h" in sys.argv:
+        print("Usage: app.py [--smoke-test]\nRuns DumDev's local dashboard and configured worker.")
+        raise SystemExit(0)
+    raise SystemExit(main())

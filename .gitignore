@@ -1,6 +1,7 @@
 # Local configuration and private state
 .env
 .env.*
+!.env.example
 *.env
 config.json
 config.*.json
@@ -11,6 +12,7 @@ data/
 logs/
 browser-profile*/
 profiles/
+follow_targets.txt
 *.sqlite
 *.sqlite3
 *.db
@@ -21,15 +23,23 @@ profiles/
 # Python and OS artifacts
 .venv/
 venv/
-__pycache__/
 .build-venv/
+.build/
+build/
+dist/
 release/
+__pycache__/
 *.py[cod]
+*.pyc
+*.spec
 .pytest_cache/
 .DS_Store
 
-# Local test and generated previews
-test-data/
+# Local tests, website previews, and generated helpers
 site/
 output/
 tmp/
+recovered-original/
+takeover-helper
+dumdev-dev-console/releases/
+dumdev-dev-console/.build-venv/

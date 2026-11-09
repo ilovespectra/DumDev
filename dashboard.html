@@ -1,0 +1,750 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Twitter Agent Monitor</title>
+    <style>
+      :root {
+        --bg: #10151f;
+        --panel: #171d2a;
+        --panel-2: #1f2734;
+        --text: #eaf2ff;
+        --muted: #a7b7d4;
+        --accent: #7dd3fc;
+        --good: #4ade80;
+        --warn: #fbbf24;
+        --bad: #f87171;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      .wrap { max-width: 1200px; margin: 0 auto; padding: 24px; }
+      .header { margin-bottom: 24px; }
+      .cards {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px;
+      }
+      .card {
+        background: var(--panel); border: 1px solid #2b3345; border-radius: 12px; padding: 18px; box-shadow: 0 1px 0 rgba(255,255,255,0.02);
+      }
+      .two-col {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;
+      }
+      ul {
+        margin: 0; padding-left: 18px; color: var(--muted);
+      }
+      li + li {
+        margin-top: 8px;
+      }
+      .label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+      .value { font-size: 28px; font-weight: 700; margin-top: 6px; }
+      .panel {
+        background: var(--panel); border: 1px solid #2b3345; border-radius: 12px; padding: 18px; margin-bottom: 24px;
+      }
+      h1, h2 { margin: 0 0 12px; }
+      pre {
+        white-space: pre-wrap; word-break: break-word; margin: 0; font-family: "SFMono-Regular", Menlo, Consolas, monospace; color: var(--muted); line-height: 1.5; background: var(--panel-2); border-radius: 8px; padding: 12px; max-height: 420px; overflow: auto;
+      }
+      .status-pill {
+        display: inline-block;
+        margin-top: 8px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(125, 211, 252, 0.12);
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .badge {
+        display: inline-block; padding: 6px 10px; border-radius: 999px; font-size: 12px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.08em; background: rgba(125, 211, 252, 0.12); color: var(--accent);
+      }
+      .status-good { color: var(--good); }
+      .status-warn { color: var(--warn); }
+      .status-bad { color: var(--bad); }
+      .settings-grid {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-top: 12px;
+      }
+      label {
+        display: block; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
+      }
+      input, textarea, button {
+        font: inherit;
+      }
+      input, textarea {
+        width: 100%; margin-top: 8px; border: 1px solid #2b3345; border-radius: 8px; background: var(--panel-2); color: var(--text); padding: 10px 12px;
+      }
+      textarea {
+        min-height: 120px; resize: vertical;
+      }
+      .save-btn {
+        margin-top: 12px; padding: 10px 16px; border: 0; border-radius: 10px; background: var(--accent); color: #08111c; font-weight: 700; cursor: pointer;
+      }
+      .approval-panel { border-color: #fbbf24; }
+      .approval-actions { display:flex; gap:12px; flex-wrap:wrap; margin-top:14px; }
+      .approval-actions button { padding:10px 16px; border:0; border-radius:10px; font-weight:700; cursor:pointer; }
+      .approve-btn { background:#4ade80; color:#08111c; }
+      .reject-btn { background:#374151; color:var(--text); }
+      .approval-note { color:var(--warn); }
+      .cards .card:first-child .value { font-size:15px; line-height:1.45; overflow-wrap:anywhere; }
+      .cards .card:nth-child(2) .value { font-size:16px; line-height:1.4; overflow-wrap:anywhere; }
+      [hidden] { display: none !important; }
+      body { line-height: 1.55; }
+      .wrap { max-width: 1280px; }
+      .header { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+      .header h1 { margin: 10px 0 0; font-size: 30px; letter-spacing: -0.035em; }
+      .card, .panel, .two-col > *, .settings-grid > * { min-width: 0; }
+      .card, .panel, li, a, .value, .status-pill, p { overflow-wrap: anywhere; }
+      .cards { grid-template-columns: minmax(0, 1.15fr) minmax(0, .8fr) minmax(0, 1.4fr); align-items: start; }
+      .two-col { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
+      .two-col ul { max-height: 280px; overflow-y: auto; padding-right: 10px; }
+      .panel h2 { font-size: 18px; letter-spacing: -.02em; }
+      .status-pill { max-width: 100%; font-size: 10px; letter-spacing: .04em; }
+      input, textarea, select { min-width: 0; max-width: 100%; }
+      select { width: 100%; margin-top: 8px; padding: 10px 12px; background: var(--panel-2); color: var(--text); border: 1px solid #43516a; border-radius: 8px; font: inherit; }
+      button { max-width: 100%; white-space: normal; }
+      button:disabled { opacity: .5; cursor: not-allowed; }
+      button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+      .secondary-btn { padding: 10px 16px; border: 1px solid #43516a; border-radius: 10px; background: var(--panel-2); color: var(--text); cursor: pointer; }
+      a { color: var(--accent); }
+      .muted, .help { color: var(--muted); font-size: 14px; }
+      .help { margin: 6px 0 16px; }
+      dialog { width: min(940px, calc(100% - 32px)); max-height: calc(100dvh - 32px); padding: 0; background: var(--bg); color: var(--text); border: 1px solid #43516a; border-radius: 20px; box-shadow: 0 30px 100px #0009; }
+      dialog::backdrop { background: #060c16d9; backdrop-filter: blur(7px); }
+      .setup-shell { display: grid; grid-template-columns: 220px minmax(0, 1fr); }
+      .setup-sidebar { padding: 28px 20px; background: var(--panel); border-right: 1px solid #2b3345; }
+      .setup-sidebar ol { list-style: none; padding: 0; margin: 24px 0; }
+      .setup-sidebar li { padding: 10px; margin: 4px 0; color: var(--muted); border-radius: 8px; font-size: 14px; }
+      .setup-sidebar li[aria-current="step"] { color: var(--accent); background: #7dd3fc17; font-weight: 700; }
+      .setup-content { padding: 28px; min-width: 0; }
+      .setup-content h2 { font-size: 25px; letter-spacing: -.025em; margin-bottom: 6px; }
+      .setup-step label { margin-top: 16px; }
+      .setup-step textarea { min-height: 100px; }
+      .setup-task { padding: 16px; border: 1px solid #7dd3fc70; border-left: 4px solid var(--accent); border-radius: 10px; margin: 18px 0; background: #7dd3fc09; }
+      .setup-task h3 { margin: 0 0 6px; font-size: 16px; }
+      .setup-task p { margin: 0 0 12px; font-size: 14px; }
+      .setup-task button { margin: 4px 6px 4px 0; }
+      .setup-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 22px; }
+      .setup-footer .save-btn { margin: 0; }
+      #setup-feedback { min-height: 24px; color: var(--warn); font-size: 14px; }
+      #setup-review { font-family: inherit; }
+      .permission-row { border-top: 1px solid #324056; padding: 12px 0; }
+      .permission-row strong { display: block; }
+      .permission-row p { margin: 4px 0; }
+      .permission-state { color: var(--warn); font-size: 13px; }
+      .permission-state.ready { color: var(--good); }
+      .setup-progress { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+      @media (max-width: 850px) {
+        .cards, .two-col { grid-template-columns: minmax(0, 1fr); }
+        .setup-shell { grid-template-columns: minmax(0, 1fr); }
+        .setup-sidebar { padding: 16px 20px; border-right: 0; border-bottom: 1px solid #2b3345; }
+        .setup-sidebar ol { display: flex; flex-wrap: wrap; gap: 4px; margin: 10px 0 0; }
+        .setup-sidebar li { padding: 4px 7px; font-size: 12px; }
+        .setup-sidebar .help { display: none; }
+      }
+      @media (max-width: 480px) {
+        .wrap { padding: 16px; }
+        .panel, .card, .setup-content { padding: 18px; }
+        .settings-grid { grid-template-columns: minmax(0, 1fr); }
+        .approval-actions button { width: 100%; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="header">
+        <div><div class="badge">Local X agent</div>
+        <h1>Your agent workspace</h1>
+        <p class="muted">Your account. Your voice. Automatic publishing within your limits.</p></div>
+        <button id="run-setup" class="secondary-btn" type="button">Run setup</button>
+      </div>
+      <p id="dashboard-feedback" role="status" class="approval-note"></p>
+      <section id="update-banner" class="panel" hidden>
+        <h2>Update available</h2><p id="update-message"></p>
+        <a id="update-download" class="secondary-btn">Download update</a>
+        <p class="help">Quit DumDev and replace the app in Applications. Your local settings and history are retained. The app does not install updates silently.</p>
+      </section>
+      <p class="help"><span id="app-version"></span> <button type="button" class="secondary-btn" id="check-updates">Check for updates</button> <span id="update-status" role="status"></span></p>
+
+      <dialog id="setup-dialog" aria-labelledby="setup-heading">
+        <div class="setup-shell">
+          <aside class="setup-sidebar">
+            <div class="badge">Guided setup</div>
+            <ol id="setup-steps">
+              <li>1. Browser &amp; account</li><li>2. Your context</li><li>3. Voice &amp; rhythm</li>
+              <li>4. Connect &amp; permissions</li><li>5. Ready to go</li>
+            </ol>
+            <p class="help">Everything stays in this local installation. Enter credentials only on X, never here.</p>
+            <button type="button" class="secondary-btn" id="setup-dismiss">View dashboard</button>
+          </aside>
+          <form id="setup-form" class="setup-content">
+            <div class="setup-progress" id="setup-progress"></div>
+            <h2 id="setup-heading">Make this agent yours</h2>
+            <section class="setup-step">
+              <p class="muted">Choose where the agent works and which X account it may use.</p>
+              <label for="setup-browser">Browser</label>
+              <select id="setup-browser" name="browser" required>
+                <option value="arc">Arc — search, contextual replies &amp; posts</option>
+                <option value="brave">Brave — isolated login &amp; posts only</option>
+                <option value="chrome">Google Chrome — isolated login &amp; posts only</option>
+              </select>
+              <p class="help" id="setup-browser-help"></p>
+              <label for="setup-handle">Automation account</label>
+              <input id="setup-handle" name="account_handle" placeholder="@yourhandle" maxlength="16" required autocomplete="off" />
+              <p class="help">Use the account you own and want to automate. We will verify its signed-in handle, not guess from the profile you are viewing.</p>
+              <p class="help">One installation is bound to one account once it has publication history. Use a separate installation for another account.</p>
+            </section>
+            <section class="setup-step" hidden>
+              <p class="muted">A personal profile, a page, a project — tell the agent what it represents.</p>
+              <label for="setup-name">Profile or project name</label>
+              <input id="setup-name" name="profile_name" maxlength="100" placeholder="What should the agent call you or your project?" required />
+              <label for="setup-description">Your description &amp; facts</label>
+              <textarea id="setup-description" name="profile_description" maxlength="4000" placeholder="What you do, who you help, your interests, and facts the agent may mention. Include any boundaries or affiliations it must not claim." required></textarea>
+              <p class="help">This is the source of truth for posts and replies. No invented accomplishments, product features, or personal experiences.</p>
+              <label for="setup-webpage">Page or project URL (optional)</label>
+              <input id="setup-webpage" name="approved_webpage" type="url" placeholder="https://example.com" />
+              <p class="help">An exact HTTPS page. Shared only in relevant invitations that explicitly ask for a project link; not added to every reply.</p>
+              <label for="setup-topics">Topics to explore</label>
+              <textarea id="setup-topics" name="topics" placeholder="One topic per line, e.g. urban gardening, accessible design" required></textarea>
+              <p class="help">1–12 specific topics, one per line (commas also work). Used for content and Arc searches.</p>
+            </section>
+            <section class="setup-step" hidden>
+              <p class="muted">Set the voice and a comfortable pace. Daily limits are ceilings, not quotas.</p>
+              <label for="setup-attitude">Attitude / agent prompt</label>
+              <textarea id="setup-attitude" name="attitude" maxlength="4000" required placeholder="How should the agent sound? What should it avoid?"></textarea>
+              <p class="help">For example: curious, direct, warm, no hype. Current publishing requires lowercase, no emoji, and short text; safety and factual accuracy override this prompt.</p>
+              <div class="settings-grid">
+                <div><label for="setup-posts">Maximum posts / day</label><input id="setup-posts" name="posts_per_day" type="number" min="0" max="20" required /></div>
+                <div><label for="setup-replies">Maximum replies / day</label><input id="setup-replies" name="replies_per_day" type="number" min="0" max="100" required /></div>
+              </div>
+              <p class="help">Post opportunities are spread from 09:00 to 19:00 local time. Arc reply searches are spaced across the day according to your reply cap. Zero disables that surface. Brave/Chrome do not search or reply.</p>
+            </section>
+            <section class="setup-step" hidden>
+              <p class="muted">Your agent is paused. These buttons only open setup destinations or run read-only checks.</p>
+              <div class="setup-task">
+                <h3>Local writing engine</h3>
+                <p>Install and open <a href="https://ollama.com/download/mac" target="_blank" rel="noopener">Ollama for Mac</a>, then download the suggested local model. No terminal commands or API key needed. The model download needs internet and disk space; generation runs locally.</p>
+                <button type="button" class="secondary-btn" id="setup-download-model">Download qwen2.5:3b</button>
+                <button type="button" class="secondary-btn" id="setup-check-model">Check model</button>
+                <p class="permission-state" id="setup-model-state" role="status">Not checked</p>
+              </div>
+              <div class="setup-task">
+                <h3>1. Sign in to the right account</h3>
+                <p id="setup-login-help"></p>
+                <button class="secondary-btn" type="button" id="setup-login">Open X login</button>
+                <button class="secondary-btn" type="button" id="setup-verify">Check signed-in account</button>
+                <p id="setup-account-state" class="permission-state" role="status">Not verified yet</p>
+              </div>
+              <div class="setup-task" id="setup-arc-permissions">
+                <h3>2. Allow the macOS permissions</h3>
+                <p>Click a destination below. In System Settings, enable the listed Python/Terminal/VS Code process that runs this app. For Input Monitoring, enable takeover-helper when listed. macOS may require restarting the app after a change.</p>
+                <div class="permission-row"><strong>Accessibility</strong><p>Allows the controller to send the guarded paste shortcut.</p><span id="permission-accessibility" class="permission-state">Not checked</span><br /><button type="button" class="secondary-btn" data-permission="accessibility">Open Accessibility</button></div>
+                <div class="permission-row"><strong>Input Monitoring</strong><p>Allows the native helper to detect interference and stop control.</p><span id="permission-input" class="permission-state">Not checked</span><br /><button type="button" class="secondary-btn" data-permission="input">Open Input Monitoring</button></div>
+                <div class="permission-row"><strong>Screen Recording</strong><p>Allows Arc-window before/after evidence, not continuous desktop recording.</p><span id="permission-screen" class="permission-state">Not checked</span><br /><button type="button" class="secondary-btn" data-permission="screen">Open Screen Recording</button></div>
+                <div class="permission-row"><strong>Automation &amp; Arc scripting</strong><p>In Arc's menu bar, enable <b>View → Developer → Allow JavaScript from Apple Events</b>. Accept macOS's request to control Arc when checking the account. If refused, open Automation and allow the controller to control Arc and System Events.</p><button type="button" class="secondary-btn" data-permission="automation">Open Automation</button></div>
+                <button type="button" class="secondary-btn" id="setup-check-permissions">Check permissions</button>
+              </div>
+              <p class="help">We can open the relevant settings and highlight your next task here, but cannot click macOS permission switches or X login controls for you. No post is sent during setup.</p>
+            </section>
+            <section class="setup-step" hidden>
+              <p class="muted">Review your setup. Finish starts autonomous publishing within your configured limits.</p>
+              <pre id="setup-review"></pre>
+              <p class="help">Running the bot authorizes automatic posts and replies. Arc gives one countdown before first control, then reuses that session across actions. The glow appears only while it is acting. Escape stops control; input pauses it. A fresh countdown follows interruption or recovery. Account checks, daily caps, duplicate protection, and publication verification remain enforced.</p>
+            </section>
+            <p id="setup-feedback" role="status" aria-live="polite"></p>
+            <div class="setup-footer"><button id="setup-back" type="button" class="secondary-btn">Back</button><button id="setup-next" type="submit" class="save-btn">Continue</button></div>
+          </form>
+        </div>
+      </dialog>
+
+      <section class="panel approval-panel" id="approval-panel" hidden>
+        <h2 id="approval-title">Draft awaiting review</h2>
+        <p class="approval-note" id="approval-note">Nothing is published unless you approve this exact text.</p>
+        <pre id="approval-text"></pre>
+        <p id="approval-target"></p>
+        <div class="approval-actions">
+          <button id="approve-btn" class="approve-btn" type="button">Approve &amp; publish exact draft</button>
+          <button id="reject-btn" class="reject-btn" type="button">Reject draft</button>
+        </div>
+        <p id="approval-feedback" role="status"></p>
+      </section>
+
+      <div class="cards">
+        <div class="card">
+          <div class="label">State</div>
+          <div id="state" class="value">loading…</div>
+          <div id="phase-pill" class="status-pill">phase</div>
+        </div>
+        <div class="card">
+          <div class="label">Account &amp; context</div>
+          <div id="repo" class="value">—</div>
+        </div>
+        <div class="card">
+          <div class="label">Verified publication / current draft</div>
+          <div id="tweet" class="value" style="font-size: 18px; line-height: 1.4;">—</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Project overview</h2>
+        <pre id="summary">loading…</pre>
+      </div>
+
+      <div class="two-col">
+        <div class="panel">
+          <h2>Queued tweets</h2>
+          <ul id="tweet-queue"><li>loading…</li></ul>
+        </div>
+        <div class="panel">
+          <h2>Response topics</h2>
+          <ul id="response-topics"><li>loading…</li></ul>
+        </div>
+        <div class="panel">
+          <h2>Search topics</h2>
+          <ul id="search-topics"><li>loading…</li></ul>
+        </div>
+        <div class="panel">
+          <h2>Observed conversation themes</h2>
+          <p>Evidence from sampled top and recent threads, not platform-wide trends.</p>
+          <ul id="discovery-trends"><li>No observations yet.</li></ul>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Agent settings</h2>
+        <form id="settings-form">
+          <div class="settings-grid">
+            <div>
+              <label for="posts_per_day">Posts / day</label>
+              <input id="posts_per_day" name="posts_per_day" type="number" min="0" max="20" value="3" />
+            </div>
+            <div>
+              <label for="replies_per_day">Reply cap / day (Arc discovery mode)</label>
+              <input id="replies_per_day" name="replies_per_day" type="number" min="0" max="100" value="100" />
+            </div>
+            <div>
+              <label for="min_gap_hours">Legacy loop min gap (hours)</label>
+              <input id="min_gap_hours" name="min_gap_hours" type="number" min="0.25" max="24" step="0.25" value="0.5" />
+            </div>
+            <div>
+              <label for="max_gap_hours">Legacy loop max gap (hours)</label>
+              <input id="max_gap_hours" name="max_gap_hours" type="number" min="0.5" max="24" step="0.25" value="2.5" />
+            </div>
+          </div>
+          <p class="help">The configured campaign spreads post slots from 09:00–19:00 and Arc reply searches across the day. Gap fields apply only to the legacy organic loop. Edit browser, account, topics, or project context through Run setup.</p>
+          <div style="margin-top: 14px;">
+            <label for="attitude">Agent attitude</label>
+            <textarea id="attitude" name="attitude"></textarea>
+          </div>
+          <button class="save-btn" type="submit">Save settings</button>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h2>Verified activity and heartbeat</h2>
+        <pre id="activity-health">loading…</pre>
+        <ul id="verified-history"></ul>
+        <pre id="activity-events"></pre>
+      </div>
+
+      <div class="panel">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:12px;">
+          <h2 style="margin:0;">Recent activity</h2>
+          <button id="bump-btn" type="button" style="padding:10px 16px; border:0; border-radius:10px; background:#7dd3fc; color:#08111c; font-weight:700; cursor:pointer;">Bump agent now</button>
+        </div>
+        <pre id="log">loading…</pre>
+      </div>
+    </div>
+
+    <script src="/setup.js"></script>
+    <script>
+      const phaseMap = {
+        setup_required: 'Paused — guided setup',
+        initialized: 'Starting',
+        starting: 'Starting',
+        analyzing_project: 'Analyzing project',
+        tweet_ready: 'Draft ready',
+        launching_browser: 'Opening browser',
+        checking_login: 'Checking login',
+        takeover_countdown: 'HANDS OFF — takeover countdown',
+        takeover_active: 'HANDS OFF — Arc takeover',
+        discovering_posts: 'Searching real posts',
+        scanning_top_threads: 'Inspecting replies in Top-result threads',
+        checking_public_responses: 'Checking public mentions and response threads',
+        discovery_complete: 'Search complete',
+        reading_reply_source: 'Reading full source tweet',
+        reply_source_read: 'Full source read — preparing contextual reply',
+        reply_ready: 'Contextual reply ready',
+        draft_retry: 'Redrafting cached candidates — no new searches',
+        reply_target_skipped: 'Source could not be verified — reply skipped',
+        no_relevant_reply: 'No useful reply found — skipped',
+        waiting_next_cycle: 'Running — waiting for next discovery cycle',
+        campaign_running: 'Running — posts and contextual replies',
+        campaign_waiting: 'Healthy — waiting for scheduled opportunity',
+        recovery_wait: 'Recovering — bounded retry',
+        relaunch_wait: 'Recovering — relaunching worker',
+        needs_attention: 'Needs attention — automatic publication stopped',
+        interrupted_retry_wait: 'Running — interrupted; retry in 30 seconds',
+        pending_reconciliation: 'Submission pending verification — retry blocked',
+        following_accounts: 'Following accounts',
+        replying_to_tweet: 'Replying',
+        posting_tweet: 'Posting tweet',
+        posted: 'Legacy attempt (not verified)',
+        verified_published: 'Verified published',
+        login_required: 'Manual login required',
+        failed_or_unverified: 'Failed or unverified; retry stopped',
+        dry_run_complete: 'Dry run complete',
+        sleeping: 'Sleeping',
+        awaiting_approval: 'Running — waiting for your approval',
+        awaiting_control_approval: 'Waiting for permission to drive Arc',
+        control_granted: 'Arc control approved — starting',
+        control_rejected: 'Arc control rejected — stopped',
+        approval_granted: 'Approved — publishing exact draft',
+        approval_rejected: 'Draft rejected — no publication',
+        approval_already_verified: 'Already verified — duplicate blocked',
+        error: 'Error'
+      };
+
+      function humanState(raw) {
+        return phaseMap[raw] || (raw || 'unknown').replace(/_/g, ' ');
+      }
+
+      function summaryText(summary) {
+        if (!summary || Object.keys(summary).length === 0) return 'No summary yet.';
+        const project = summary.name || summary.repo || 'Project';
+        const description = summary.description || 'No project description available yet.';
+        const highlights = Array.isArray(summary.highlights) ? summary.highlights.slice(0, 4) : [];
+        const parts = [
+          `Project: ${project}`,
+          '',
+          description,
+          ''
+        ];
+        if (highlights.length) {
+          parts.push('Highlights: ' + highlights.join(' • '));
+        }
+        return parts.join('\n');
+      }
+
+      function formatLogLines(data) {
+        const lines = data.log_tail || [];
+        if (!lines.length) return 'No log lines yet.';
+        return lines
+          .map(line => {
+            const trimmed = String(line).trim();
+            if (!trimmed) return '';
+            return trimmed;
+          })
+          .filter(Boolean)
+          .slice(-25)
+          .join('\n');
+      }
+
+      function renderList(elId, values) {
+        const el = document.getElementById(elId);
+        const entries = Array.isArray(values) ? values.filter(Boolean) : [];
+        if (!entries.length) {
+          el.innerHTML = '<li>None yet</li>';
+          return;
+        }
+        el.innerHTML = entries.map(v => '<li>' + String(v).replace(/</g, '&lt;') + '</li>').join('');
+      }
+
+      async function loadSettings() {
+        const res = await fetch('/settings', { cache: 'no-store' });
+        const settings = await res.json();
+        if (!settings) return;
+        document.getElementById('posts_per_day').value = settings.posts_per_day ?? 3;
+        document.getElementById('replies_per_day').value = settings.replies_per_day ?? 100;
+        document.getElementById('replies_per_day').disabled = Boolean(settings.browser && settings.browser !== 'arc');
+        document.getElementById('min_gap_hours').value = settings.min_gap_hours ?? 0.5;
+        document.getElementById('max_gap_hours').value = settings.max_gap_hours ?? 2.5;
+        document.getElementById('attitude').value = settings.attitude || '';
+        window.agentSettings = settings;
+      }
+
+      async function loadStatus() {
+        const [res, approvalRes, controlRes] = await Promise.all([
+          fetch('/status', { cache: 'no-store' }),
+          fetch('/approval', { cache: 'no-store' }),
+          fetch('/control', { cache: 'no-store' })
+        ]);
+        const data = await res.json();
+        const approvalData = await approvalRes.json();
+        const controlData = await controlRes.json();
+        renderApproval(controlData.pending_approval || approvalData.pending_approval,
+          controlData.error || approvalData.error);
+        const s = data.status || {};
+        const activity = data.activity || {};
+        const state = s.state || 'unknown';
+        const lastActivity = activity.recent_events?.[0];
+        const retryStates = ['recovery_wait', 'relaunch_wait', 'interrupted_retry_wait', 'pending_reconciliation'];
+        const nextAt = state === 'campaign_waiting' ? s.next_cycle_at : s.next_retry_at;
+        const awaitingReview = ['awaiting_approval', 'awaiting_control_approval'].includes(state);
+        const nextLabel = awaitingReview ? 'Next step' :
+          retryStates.includes(state) ? 'Next retry' : 'Next activity';
+        const nextText = awaitingReview ? 'waiting for your review' :
+          nextAt ? new Date(nextAt).toLocaleString() :
+          (state === 'needs_attention' ? 'stopped — attention required' : 'not scheduled');
+        document.getElementById('activity-health').textContent =
+          `Last activity: ${lastActivity ? `${lastActivity.at} · ${humanState(lastActivity.state)}` : 'not recorded'}\nProcess heartbeat: ${s.updated_at || 'unknown'}\nLast error: ${s.error || s.last_error?.message || 'none recorded'}\n${nextLabel}: ${nextText}\nLast verified publication: ${activity.last_verified_at || s.posted_at || 'unknown'}\nLast prepared reply: ${activity.last_attempt_at || 'not recorded'}\nCandidate attempt: ${s.candidate_attempt || 'none'}; remaining: ${s.candidates_remaining ?? 'unknown'}`;
+        const historyEl = document.getElementById('verified-history');
+        historyEl.replaceChildren();
+        for (const post of activity.verified_publications || []) {
+          const item = document.createElement('li');
+          item.textContent = `${post.kind} · ${post.day}: ${post.text} `;
+          if (/^https:\/\/x\.com\/[a-zA-Z0-9_]+\/status\/\d+$/.test(post.url || '')) {
+            const a = document.createElement('a');
+            a.href = post.url;
+            a.textContent = 'verified publication';
+            a.target = '_blank';
+            a.rel = 'noopener';
+            item.appendChild(a);
+          }
+          historyEl.appendChild(item);
+        }
+        document.getElementById('activity-events').textContent = (activity.recent_events || []).map(e =>
+          `${e.at} · ${humanState(e.state)}\n${e.target || ''} ${e.reason || ''}`).join('\n\n');
+        const settings = window.agentSettings || s.settings || {};
+        const stateEl = document.getElementById('state');
+        const phaseEl = document.getElementById('phase-pill');
+        const repoEl = document.getElementById('repo');
+        const tweetEl = document.getElementById('tweet');
+        const summaryEl = document.getElementById('summary');
+        const logEl = document.getElementById('log');
+
+        stateEl.textContent = humanState(state);
+        if (s.daily_activity) {
+          const d = s.daily_activity;
+          stateEl.textContent += ` · ${d.published.post}/${d.caps.post} posts · ${d.published.reply}/${d.caps.reply} replies today`;
+          if (d.next_post_at) stateEl.textContent += ` · standalone post slot ${new Date(d.next_post_at).toLocaleTimeString()}`;
+        }
+        if (s.next_cycle_at && state === 'campaign_waiting') {
+          stateEl.textContent += ` · next opportunity ${new Date(s.next_cycle_at).toLocaleTimeString()}`;
+        }
+        if (s.last_cycle) {
+          stateEl.textContent += ` · last outcome: ${humanState(s.last_cycle.state)}`;
+          if (s.last_cycle.note) stateEl.textContent += ` (${s.last_cycle.note})`;
+        }
+        const age = (Date.now() - Date.parse(s.updated_at || '')) / 1000;
+        if (age > 300) stateEl.textContent += ' · STALE: no heartbeat for over 5 minutes';
+        if (s.error) stateEl.textContent += ` · error: ${s.error}`;
+        if (s.growth_summary?.length) {
+          stateEl.textContent += ' · observed engagement: ' + s.growth_summary.map(g =>
+            `${g.category}: ${g.average_replies} replies/post (${g.measured_posts} measured${g.enough_evidence ? '' : ', insufficient evidence'})`).join('; ');
+        }
+        phaseEl.textContent = humanState(state);
+        phaseEl.style.background = (state === 'verified_published') ? 'rgba(74, 222, 128, 0.12)' :
+          (state === 'sleeping' || state === 'tweet_ready' || state === 'following_accounts') ? 'rgba(251, 191, 36, 0.12)' :
+          'rgba(125, 211, 252, 0.12)';
+        phaseEl.style.color = (state === 'verified_published') ? '#4ade80' :
+          (state === 'sleeping' || state === 'tweet_ready' || state === 'following_accounts') ? '#fbbf24' :
+          '#7dd3fc';
+
+        repoEl.textContent = [settings.account_handle ? '@' + settings.account_handle : '',
+          settings.profile_name || s.repo || s.project_summary?.repo || 'No context configured'].filter(Boolean).join('\n');
+
+        tweetEl.textContent = s.last_verified_tweet
+          ? 'Verified: ' + s.last_verified_tweet
+          : 'No verified published tweets. Draft: ' + (s.tweet || 'none');
+        if (s.post_url && /^https:\/\/x\.com\/[a-zA-Z0-9_]+\/status\/\d+$/.test(s.post_url)) {
+          const link = document.createElement('a');
+          link.href = s.post_url;
+          link.textContent = ' view published post';
+          link.target = '_blank';
+          link.rel = 'noopener';
+          tweetEl.appendChild(link);
+          for (const [label, path] of [[' before screenshot', s.evidence_before], [' after screenshot', s.evidence_after]]) {
+            if (!/^\/evidence\/[a-f0-9]{32}\/(before|after)\.png$/.test(path || '')) continue;
+            const evidence = document.createElement('a');
+            evidence.href = path;
+            evidence.textContent = label;
+            evidence.target = '_blank';
+            tweetEl.appendChild(evidence);
+          }
+        }
+
+        const campaign = s.campaign || {};
+        renderList('tweet-queue', s.tweet_queue || campaign.queued_tweets || []);
+        renderList('response-topics', s.response_topics || campaign.response_topics || []);
+        renderList('search-topics', s.search_topics || campaign.search_topics || []);
+        renderList('discovery-trends', (s.discovery_trends || []).slice(0, 6).map(t =>
+          t.term + ' — ' + t.authors + ' authors; ' + t.modes.join(' + ') +
+          '\n' + t.sources.join('\n')));
+        const discovered = s.discovered_posts || [];
+        if (discovered.length) {
+          renderList('response-topics', discovered.map(p => p.url + '\n' + p.text));
+        }
+        if (s.reply_context) {
+          const context = document.createElement('div');
+          context.textContent = 'Reply source: ' + s.reply_context.url + ' — ' + s.reply_context.text;
+          tweetEl.appendChild(context);
+        }
+
+        const summary = settings.onboarding_completed ?
+          { name: settings.profile_name, description: settings.profile_description, highlights: settings.topics } :
+          (s.summary || s.project_summary || {});
+        summaryEl.textContent = summaryText(summary);
+
+        logEl.textContent = (s.error ? s.error + '\n\n' : '') + formatLogLines(data);
+      }
+
+      async function renderApproval(request, error) {
+        const panel = document.getElementById('approval-panel');
+        const feedback = document.getElementById('approval-feedback');
+        if (!request) {
+          panel.hidden = !error;
+          feedback.textContent = error || '';
+          document.getElementById('approve-btn').disabled = true;
+          document.getElementById('reject-btn').disabled = true;
+          if (error) {
+            document.getElementById('approval-title').textContent = 'Approval unavailable';
+            document.getElementById('approval-text').textContent = '';
+            document.getElementById('approval-target').replaceChildren();
+          }
+          return;
+        }
+        panel.hidden = false;
+        const control = request.kind === 'control';
+        document.getElementById('approval-title').textContent =
+          control ? 'Allow the agent to drive Arc?' :
+          request.kind === 'reply' ? 'Reply draft awaiting review' : 'Post draft awaiting review';
+        document.getElementById('approval-note').textContent =
+          control ? 'Permission applies to this worker session only. Restarting requires fresh approval. Draft approval is separate.' :
+          `Review the exact ${request.kind}. Approving authorizes this text${request.kind === 'reply' ? ' as a reply to the linked X post' : ''}${window.agentSettings?.account_handle ? ' on @' + window.agentSettings.account_handle : ' on the verified signed-in account'}.`;
+        document.getElementById('approval-text').textContent = request.text;
+        const target = document.getElementById('approval-target');
+        target.replaceChildren();
+        if (request.kind === 'reply' && /^https:\/\/x\.com\/[A-Za-z0-9_]+\/status\/\d+$/.test(request.target?.url || '')) {
+          target.append('Replying to ');
+          const link = document.createElement('a');
+          link.href = request.target.url;
+          link.textContent = request.target.url;
+          link.target = '_blank';
+          link.rel = 'noopener';
+          target.appendChild(link);
+        }
+        feedback.textContent = error || '';
+        const approve = document.getElementById('approve-btn');
+        const reject = document.getElementById('reject-btn');
+        approve.textContent = control ? 'Allow Arc control' :
+          request.kind === 'reply' ? 'Approve & publish exact reply' : 'Approve & publish exact post';
+        reject.textContent = control ? 'Do not allow' : 'Reject draft';
+        approve.disabled = Boolean(error);
+        reject.disabled = Boolean(error);
+        approve.onclick = () => sendApproval(request, 'approve');
+        reject.onclick = () => sendApproval(request, 'reject');
+      }
+
+      async function sendApproval(request, decision) {
+        const control = request.kind === 'control';
+        const action = control ?
+          (decision === 'approve' ? 'allow this session to drive Arc' : 'deny Arc control and stop the agent') :
+          (decision === 'approve' ? 'publish this exact draft' : 'reject this draft');
+        if (!window.confirm(`Are you sure you want to ${action}?`)) return;
+        const approve = document.getElementById('approve-btn');
+        const reject = document.getElementById('reject-btn');
+        const feedback = document.getElementById('approval-feedback');
+        approve.disabled = true;
+        reject.disabled = true;
+        feedback.textContent = 'Recording your decision…';
+        try {
+          const response = await fetch(control ? '/control' : '/approval', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: request.id, decision })
+          });
+          if (!response.ok) throw new Error('This draft is no longer awaiting review. Refreshing…');
+          feedback.textContent = control ?
+            (decision === 'approve' ? 'Arc control approved; starting the agent.' : 'Arc control denied; the agent will stop.') :
+            (decision === 'approve' ? 'Approved; the bot is publishing this exact draft.' : 'Rejected; nothing was published.');
+          window.location.hash = 'approval-recorded';
+          setTimeout(loadStatus, 500);
+        } catch (error) {
+          feedback.textContent = error.message || 'Could not record the decision.';
+          approve.disabled = false;
+          reject.disabled = false;
+        }
+      }
+
+      const bumpBtn = document.getElementById('bump-btn');
+      bumpBtn.addEventListener('click', async () => {
+        bumpBtn.disabled = true;
+        bumpBtn.textContent = 'Queued';
+        try {
+          const response = await fetch('/bump', { method: 'POST', cache: 'no-store' });
+          if (!response.ok) throw new Error('Agent could not be bumped. Finish setup first.');
+        } catch (error) {
+          document.getElementById('dashboard-feedback').textContent = error.message;
+        } finally {
+          setTimeout(() => {
+            bumpBtn.disabled = false;
+            bumpBtn.textContent = 'Bump agent now';
+          }, 1500);
+        }
+      });
+
+      document.getElementById('settings-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const payload = {
+          posts_per_day: Number(form.posts_per_day.value),
+          replies_per_day: Number(form.replies_per_day.value),
+          min_gap_hours: Number(form.min_gap_hours.value || 0.5),
+          max_gap_hours: Number(form.max_gap_hours.value || 2.5),
+          first_day_no_sleep: false,
+          attitude: form.attitude.value.trim()
+        };
+        try {
+          const response = await fetch('/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || 'Could not save settings.');
+          window.agentSettings = result;
+          document.getElementById('dashboard-feedback').textContent = 'Settings saved. They apply on the next cycle.';
+        } catch (error) {
+          document.getElementById('dashboard-feedback').textContent = error.message;
+        }
+      });
+
+      function showLoadError(error) {
+        document.getElementById('dashboard-feedback').textContent = 'Dashboard connection failed: ' + error.message;
+      }
+      loadSettings().catch(showLoadError);
+      loadStatus().catch(showLoadError);
+      setInterval(() => loadStatus().catch(showLoadError), 5000);
+      async function loadUpdates() {
+        const response = await fetch('/updates', {cache: 'no-store'});
+        if (!response.ok) throw new Error('Update service unavailable.');
+        const update = await response.json();
+        document.getElementById('app-version').textContent = 'DumDev ' + (update.current_version || '');
+        document.getElementById('update-banner').hidden = !update.available;
+        if (update.available) {
+          document.getElementById('update-message').textContent = 'DumDev ' + update.latest_version + ' is ready.';
+          const link = document.getElementById('update-download');
+          link.href = update.download_url;
+          link.rel = 'noopener';
+          link.target = '_blank';
+        }
+        document.getElementById('update-status').textContent = update.state === 'unavailable' ?
+          'Update check unavailable. Try again later.' : update.state === 'checked' ?
+          (update.available ? 'New release available' : 'You are up to date') : 'Checking…';
+      }
+      document.getElementById('check-updates').onclick = async () => {
+        try {
+          const response = await fetch('/updates/check', {method: 'POST'});
+          if (!response.ok) throw new Error('Could not start update check.');
+          document.getElementById('update-status').textContent = 'Checking…';
+          setTimeout(() => loadUpdates().catch(showLoadError), 1000);
+        } catch (error) { showLoadError(error); }
+      };
+      loadUpdates().catch(showLoadError);
+      setInterval(() => loadUpdates().catch(showLoadError), 60000);
+    </script>
+  </body>
+</html>
