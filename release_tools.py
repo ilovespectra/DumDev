@@ -127,5 +127,10 @@ def build_release(version: str, progress: Callable[[str], None] | None = None) -
             "install_note": "Open the zip, drag DumDev.app to Applications, and open it.",
             "ollama_required": True}
     manifest.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    if version_tuple(version) > version_tuple(current):
+        bumped = source.replace(f'VERSION = "{current}"', f'VERSION = "{version}"', 1)
+        replacement = source_app.with_suffix(".tmp")
+        replacement.write_text(bumped, encoding="utf-8")
+        replacement.replace(source_app)
     return {"version": version, "file": archive.name, "size_bytes": archive.stat().st_size,
             "sha256": digest, "manifest": str(manifest)}

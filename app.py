@@ -179,8 +179,10 @@ class DumDevHandler(SimpleHTTPRequestHandler):
             except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError, TypeError):
                 return self._json(503, {"error": "Ollama is not responding at 127.0.0.1:11434. Open Ollama and try again."})
         if self.path == "/api/release-status" and os.environ.get("DUMDEV_DEVELOPER_MODE") == "1":
-            return self._json(200, {"version": VERSION, "next_version": release_tools.next_patch(VERSION),
-                                    "latest": release_tools.latest_release()})
+            latest = release_tools.latest_release()
+            base_version = latest["version"] if latest and release_tools.version_tuple(str(latest["version"])) > release_tools.version_tuple(VERSION) else VERSION
+            return self._json(200, {"version": VERSION, "next_version": release_tools.next_patch(str(base_version)),
+                                    "latest": latest})
         if self.path.startswith("/api/release-file/") and os.environ.get("DUMDEV_DEVELOPER_MODE") == "1":
             name = self.path.removeprefix("/api/release-file/")
             if not re.fullmatch(r"DumDev-[0-9]+\.[0-9]+\.[0-9]+-macOS-arm64\.zip", name):
