@@ -12,16 +12,18 @@ import threading
 import urllib.error
 import urllib.request
 import webbrowser
+import release_tools
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("DUMDEV_PORT", "8766"))
 OLLAMA = "http://127.0.0.1:11434"
-WEB_ROOT = Path(__file__).resolve().parent / "web"
-ASSET_ROOT = Path(__file__).resolve().parent / "assets"
+RESOURCE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+WEB_ROOT = RESOURCE_DIR / "web"
+ASSET_ROOT = RESOURCE_DIR / "assets"
 DATA_DIR = Path(os.environ.get("DUMDEV_DATA_DIR", str(Path.home() / "Library" / "Application Support" / "DumDev")))
 CONFIG_PATH = DATA_DIR / "config.json"
 BROWSERS = {"Safari": "Safari", "Chrome": "Google Chrome", "Brave": "Brave Browser", "Arc": "Arc", "Firefox": "Firefox"}
@@ -84,6 +86,8 @@ def validate_config(raw: dict[str, Any], merge: bool = False) -> dict[str, Any]:
     complete = source.get("setup_complete", False)
     if not isinstance(complete, bool):
         raise ValueError("Setup status must be a boolean.")
+    if complete and not model:
+        raise ValueError("Install Ollama, download a local model, and choose it before finishing setup.")
     return {"setup_complete": complete, "browser": browser, "model": model,
             "topics": topics, "voice": voice, "cadence": cadence}
 
@@ -173,7 +177,15 @@ class DumDevHandler(SimpleHTTPRequestHandler):
             try:
                 return self._json(200, {"models": ollama_models()})
             except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError, TypeError):
-                return self._json(503, {"error": "Ollama is not responding at 127.0.0.1:11434. Start Ollama and refresh models."})
+                return self._json(503, {"error": "Ollama is not responding at 127.0.0.1:11434. Open Ollama and try again."})
+        if self.path == "/api/release-status" and os.environ.get("DUMDEV_DEVELOPER_MODE") == "1":
+            return self._json(200, {"version": VERSION, "next_version": release_tools.next_patch(VERSION),
+                                    "latest": release_tools.latest_release()})
+        if self.path.startswith("/api/release-file/") and os.environ.get("DUMDEV_DEVELOPER_MODE") == "1":
+            name = self.path.removeprefix("/api/release-file/")
+            if not re.fullmatch(r"DumDev-[0-9]+\.[0-9]+\.[0-9]+-macOS-arm64\.zip", name):
+                return self._json(404, {"error": "Not found."})
+            return self._send_file(release_tools.RELEASE_DIR / name, "application/zip")
         if self.path.startswith("/assets/"):
             name = self.path.removeprefix("/assets/")
             if name not in {"dumdev-mark.svg"}:
@@ -194,6 +206,18 @@ class DumDevHandler(SimpleHTTPRequestHandler):
             body = self._read_body()
             if self.path == "/api/config":
                 return self._json(200, save_config(body))
+            if self.path == "/api/ollama-pull":
+                model = body.get("model", "")
+                if not isinstance(model, str) or not re.fullmatch(r"[A-Za-z0-9._:/-]{1,100}", model):
+                    raise ValueError("Enter a model name, for example qwen2.5:3b.")
+                req = urllib.request.Request(f"{OLLAMA}/api/pull", data=json.dumps({"name": model, "stream": False}).encode(),
+                                             headers={"Content-Type": "application/json"}, method="POST")
+                with urllib.request.urlopen(req, timeout=1800) as response:
+                    result = json.loads(response.read(2_000_000).decode("utf-8"))
+                return self._json(200, {"model": model, "status": result.get("status", "success")})
+            if self.path == "/api/build-release" and os.environ.get("DUMDEV_DEVELOPER_MODE") == "1":
+                result = release_tools.build_release(body.get("version", ""))
+                return self._json(200, result)
             if self.path == "/api/pause":
                 paused = body.get("paused")
                 if not isinstance(paused, bool):

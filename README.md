@@ -1,61 +1,32 @@
 # DumDev
 
-**A free, local-first writing companion.** DumDev uses a locally installed Ollama model to draft one social post at a time from notes you provide. You review and edit it, copy it if useful, and decide what to do yourself.
+A free, local writing companion. **Ollama is required**: it is DumDev's writing engine and runs on your Mac. DumDev turns notes you provide into one draft at a time. You review, edit, and copy it yourself.
 
-DumDev is not an autoposter or account bot. It does not read X pages, timelines, browser profiles, cookies, passwords, or account data; it does not automate clicks, publish posts or replies, follow accounts, or work around platform restrictions. The browser choice only opens X's sign-in page when you explicitly ask; DumDev does not handle login or control that browser. No X API key, developer account, browser extension, or extra site permission is required.
+## Install (no Terminal needed)
 
-## Quick start
+1. On the DumDev webpage, click **Download DumDev for Mac**. Open the ZIP and drag `DumDev.app` into **Applications**.
+2. Install [Ollama for Mac](https://ollama.com/download/mac) and open the Ollama app. Keep it running while using DumDev.
+3. Open DumDev. In setup, download the suggested local model with the **Download this model** button. Ollama handles the download; no commands are needed.
+4. Choose optional topics and your own voice notes, then create a draft in the local dashboard.
 
-### One-time setup
+DumDev is currently built for Apple silicon (macOS arm64). The app is ad-hoc signed, not notarized; macOS may ask you to confirm opening it. Review the release and its checksum before running it.
 
-1. Install **Python 3.10+** and [Ollama](https://ollama.com) on macOS.
-2. In Terminal, download one local model, for example:
+## What it does
 
-   ```sh
-   ollama pull llama3.2:3b
-   ```
+DumDev sends draft notes only to Ollama on this Mac at `127.0.0.1:11434`. It does not read X, use X APIs, sign in, control the browser, scrape, auto-post, reply, follow, schedule activity, or bypass platform restrictions. Browser choice is optional and only opens the X sign-in page when you explicitly ask. A cadence is a planning note, not a timer. If X shows a challenge or limit, stop and follow X's instructions.
 
-### Start DumDev
+Preferences stay in `~/Library/Application Support/DumDev/config.json`; drafts remain in the open page and are not saved as history. Ollama models have their own hardware needs, licenses, and privacy terms.
 
-1. Clone or download this repository and open its folder in Finder.
-2. Double-click **`start.command`**. The local dashboard opens in your browser.
-3. In the first-run wizard, choose the browser you use, select an installed Ollama model, and set any topics, your own voice notes, and a drafting cadence you want.
+## Developer release tools
 
-No Python packages need to be installed. If macOS blocks `start.command`, Control-click it, choose **Open**, and confirm only after reviewing the source. The Terminal alternative is `python3 app.py`. DumDev serves only on `127.0.0.1` (ports 8766–8780) and opens its local dashboard; press Control-C in its Terminal to stop it.
+Run `start.command` from Finder to open DumDev's local developer dashboard. The **Update binaries** panel lets you set a newer `major.minor.patch` version and build a self-contained macOS ZIP. It stages the app and SHA-256 manifest under `release/`; it does not publish or upload them. Add the new package and manifest to the webpage download folder when you are ready to release. The builder needs an internet connection once to install its isolated packaging tool.
 
-If Ollama is already running, DumDev can list installed models. If not, open Ollama and retry. The local API must be available at `127.0.0.1:11434`.
-
-## First run and dashboard
-
-- The wizard asks which browser you use. **Open X sign-in** only opens the login page in that installed browser. Sign in and manage permissions there yourself; DumDev does not read or control the page.
-- Choose a model already installed in Ollama. The example above is a small general-purpose model; use any local model compatible with Ollama.
-- Add up to 12 topic keywords and up to 500 characters of notes describing **your own** writing style. Do not use another person's identity or private information.
-- Drafting cadence is a planning preference only. DumDev has no scheduler and does not create or publish drafts on a timer.
-- Enter your own source notes, ask for one draft, then review, edit, verify, and copy it manually if you want. Every generated result is marked unpublished.
-- Pause blocks new draft requests. Stop asks DumDev to discard a result if it arrives late; Ollama may finish the local request already in progress before DumDev can discard it.
-
-If X displays a challenge, rate limit, or restriction notice, stop and follow X's instructions. DumDev does not attempt to evade it.
-
-## What was adapted
-
-The original local bot combines Ollama drafting with browser automation, feed discovery, replies, follows, account-specific prompts, and saved browser/session state. DumDev keeps the portable ideas—local Ollama drafting, user-configurable topics and voice, a cadence preference, and a local status dashboard—but intentionally excludes account actions and account-specific material. The original bot folder and its live configuration are not part of this project.
-
-## Privacy and local data
-
-- Settings are stored on this Mac at `~/Library/Application Support/DumDev/config.json`, with restrictive local file permissions.
-- The open page holds the current draft; DumDev does not create a draft-history or activity log.
-- Draft notes and the prompt are sent only to the local Ollama service at `127.0.0.1:11434`. Ollama uses the model you installed; review that model's own privacy and license terms.
-- DumDev does not make X API calls or retrieve X content. Opening external help pages or X sign-in is an explicit action in your browser.
-- The repository contains no account settings, credentials, personal browser profiles, browser cookies, logs, or local model data.
-
-## Verify
+## Verify from source
 
 ```sh
 python3 -m unittest discover -s tests -v
 ```
 
-Tests use temporary settings and a local-only mock Ollama service. They do not open a browser, contact X, or publish anything.
+The tests use temporary settings and a local mock Ollama server; they do not contact X or publish anything. The user-facing installer requires no command line.
 
-## Free software
-
-DumDev is free software under the MIT License. It is independent and is not affiliated with or endorsed by X or Ollama. AI output can be wrong: verify every claim and follow the platform's current terms.
+Free software under MIT. Independent and not affiliated with X or Ollama. Verify AI-generated claims and follow current platform terms.

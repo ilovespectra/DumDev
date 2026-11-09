@@ -22,6 +22,8 @@ profiles/
 .venv/
 venv/
 __pycache__/
+.build-venv/
+release/
 *.py[cod]
 .pytest_cache/
 .DS_Store
