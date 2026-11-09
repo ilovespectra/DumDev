@@ -1,0 +1,33 @@
+# Local configuration and private state
+.env
+.env.*
+*.env
+config.json
+config.*.json
+settings.json
+status.json
+user-data/
+data/
+logs/
+browser-profile*/
+profiles/
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.pid
+*.log
+
+# Python and OS artifacts
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store
+
+# Local test and generated previews
+test-data/
+site/
+output/
+tmp/
