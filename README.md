@@ -19,7 +19,7 @@ DumDev is not an autoposter or account bot. It does not read X pages, timelines,
 
 1. Clone or download this repository and open its folder in Finder.
 2. Double-click **`start.command`**. The local dashboard opens in your browser.
-3. In the first-run wizard, choose the browser you use, select an installed Ollama model, and optionally set topics, your own voice notes, and a drafting cadence.
+3. In the first-run wizard, choose the browser you use, select an installed Ollama model, and set any topics, your own voice notes, and a drafting cadence you want.
 
 No Python packages need to be installed. If macOS blocks `start.command`, Control-click it, choose **Open**, and confirm only after reviewing the source. The Terminal alternative is `python3 app.py`. DumDev serves only on `127.0.0.1` (ports 8766–8780) and opens its local dashboard; press Control-C in its Terminal to stop it.
 
@@ -27,7 +27,7 @@ If Ollama is already running, DumDev can list installed models. If not, open Oll
 
 ## First run and dashboard
 
-- Browser selection is optional setup guidance. **Open X sign-in** only opens the login page in the chosen installed browser. Sign in and manage permissions there yourself; DumDev does not read or control the page.
+- The wizard asks which browser you use. **Open X sign-in** only opens the login page in that installed browser. Sign in and manage permissions there yourself; DumDev does not read or control the page.
 - Choose a model already installed in Ollama. The example above is a small general-purpose model; use any local model compatible with Ollama.
 - Add up to 12 topic keywords and up to 500 characters of notes describing **your own** writing style. Do not use another person's identity or private information.
 - Drafting cadence is a planning preference only. DumDev has no scheduler and does not create or publish drafts on a timer.

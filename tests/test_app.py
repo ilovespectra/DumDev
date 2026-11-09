@@ -97,6 +97,9 @@ class DumDevTests(unittest.TestCase):
         self.assertIn("DumDev", html)
         self.assertIn("NO AUTOPUBLISH", html)
         self.assertIn("Choose your browser", html)
+        self.assertIn("Cadence help", html)
+        self.assertIn(".tooltip:hover .tip", html)
+        self.assertIn(".tooltip:focus .tip", html)
         with urlopen(self.base + "/api/health", timeout=3) as response:
             health = json.loads(response.read())
         self.assertTrue(health["ok"])
