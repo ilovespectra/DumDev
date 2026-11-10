@@ -35,6 +35,8 @@
     .status p { margin:0; color:#d2e5e4; font-size:14px; }
     .download { display:inline-flex; margin-top:14px; padding:10px 15px; border-radius:10px; background:var(--cyan); color:#071a1a; font-weight:750; text-decoration:none; }
     .checksum { margin-top:10px !important; color:var(--muted) !important; font-size:12px !important; overflow-wrap:anywhere; }
+    .release-count-link { display:inline-block; margin-top:10px; color:var(--cyan); font-weight:700; text-decoration:none; }
+    .release-count-link:hover { text-decoration:underline; }
     footer { padding:22px 0 30px; border-top:1px solid #ffffff13; color:#92a2b7; font-size:13px; }
     footer strong { color:#c4d1df; }
     @media (max-width:720px) { .wrap { width:min(100% - 28px,560px); } main { padding:54px 0 44px; } .grid { grid-template-columns:1fr; margin-top:32px; } .card { min-height:0; } header { height:66px; } }
@@ -72,6 +74,11 @@
           <p id="release-checksum" class="checksum"></p>
         </div>
       </aside>
+      <aside class="status" aria-label="GitHub release downloads">
+        <strong>GitHub release downloads</strong>
+        <p id="github-release-status" role="status" aria-live="polite">Counts installer files attached to published releases in the DumDev repository.</p>
+        <a class="release-count-link" id="github-release-count" href="https://github.com/ilovespectra/dumdev/releases" target="_blank" rel="noopener noreferrer">Checking GitHub releases…</a>
+      </aside>
     </main>
     <footer><strong>DumDev is the X bot.</strong> Cruise Control is a separate HeyClicky companion.</footer>
   </div>
@@ -96,6 +103,43 @@
       } catch (_) {
         title.textContent = 'The next verified DumDev download is being prepared.';
         copy.textContent = 'This page will offer the download as soon as its package and update manifest are published.';
+      }
+    })();
+  </script>
+  <script>
+    (async () => {
+      const owner = 'ilovespectra';
+      const repo = 'dumdev';
+      const count = document.getElementById('github-release-count');
+      const status = document.getElementById('github-release-status');
+      const releasePage = `https://github.com/${owner}/${repo}/releases`;
+      count.href = releasePage;
+      const format = value => new Intl.NumberFormat().format(value);
+      try {
+        let total = 0;
+        let installerAssetCount = 0;
+        for (let page = 1; ; page += 1) {
+          const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases?per_page=100&page=${page}`, {headers:{Accept:'application/vnd.github+json'}});
+          if (!response.ok) throw new Error(`GitHub returned ${response.status}`);
+          const releases = await response.json();
+          if (!Array.isArray(releases)) throw new Error('Invalid release list');
+          for (const release of releases) {
+            if (release.draft || !Array.isArray(release.assets)) continue;
+            for (const asset of release.assets) {
+              if (!['.dmg', '.pkg', '.zip', '.exe', '.msi', '.appimage', '.deb', '.rpm', '.tar.gz'].some(suffix => (asset.name || '').toLowerCase().endsWith(suffix))) continue;
+              if (!Number.isSafeInteger(asset.download_count) || asset.download_count < 0) throw new Error('Invalid asset count');
+              total += asset.download_count;
+              installerAssetCount += 1;
+            }
+          }
+          if (releases.length < 100) break;
+        }
+        count.textContent = `${format(total)} installer downloads on GitHub`;
+        status.textContent = installerAssetCount ? 'Total installer-asset downloads across published DumDev GitHub releases; the separate website update feed is not included.' : 'No published installer files yet. This GitHub count is separate from DumDev’s website update feed.';
+      } catch (error) {
+        count.textContent = 'Download count unavailable — view GitHub releases';
+        status.textContent = 'GitHub did not return a complete public release list, so no total is guessed.';
+        console.warn('DumDev GitHub release count failed:', error);
       }
     })();
   </script>
