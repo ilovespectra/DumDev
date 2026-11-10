@@ -12,7 +12,9 @@ import webbrowser
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+import time
 
+import github_release
 import release_builder
 
 HOST = "127.0.0.1"
@@ -26,7 +28,16 @@ REQUIRED = ("app.py", "twitter_agent.py", "runtime_paths.py", "update_manager.py
 _settings_lock = threading.Lock()
 _build_lock = threading.Lock()
 _build_status: dict[str, Any] = {"state": "idle", "message": "Ready when a complete DumDev source folder is selected."}
+_github_cache: dict[str, Any] = {"until": 0.0, "value": {"enabled": False, "account": "", "message": "Checking owner authentication…"}}
 _CSRF_TOKEN = secrets.token_urlsafe(32)
+
+
+def github_status(path: str) -> dict[str, Any]:
+    now = time.monotonic()
+    if now >= _github_cache["until"]:
+        _github_cache["value"] = github_release.github_status(Path(path))
+        _github_cache["until"] = now + 20
+    return dict(_github_cache["value"])
 
 
 def load_source() -> str:
@@ -54,6 +65,7 @@ def save_source(value: str) -> str:
     except OSError:
         pass
     temp.replace(SETTINGS_FILE)
+    _github_cache["until"] = 0.0
     return str(candidate)
 
 
@@ -157,7 +169,9 @@ window.DUMDEV_CONSOLE_TOKEN = {token};
         if self.path in {"/", "/index.html"}:
             return self._serve_index()
         if self.path == "/api/status":
-            return self._json(200, {**inspect_source(), "build": dict(_build_status),
+            state = inspect_source()
+            return self._json(200, {**state, "build": dict(_build_status),
+                                   "github": github_status(state["source_path"]) if state["source_path"] else {"enabled": False, "message": "Select the canonical DumDev source for owner releases."},
                                    "latest_release": release_builder.latest_release(),
                                    "release_dir": str(release_builder.RELEASE_DIR)})
         return super().do_GET()
@@ -179,23 +193,26 @@ window.DUMDEV_CONSOLE_TOKEN = {token};
             if self.path == "/api/source":
                 saved = save_source(str(body.get("source_path", "")))
                 return self._json(200, inspect_source(saved))
-            if self.path in {"/api/build", "/api/publish"}:
+            if self.path in {"/api/build", "/api/github-draft"}:
                 state = inspect_source()
                 if not state["ready"]:
                     raise ValueError(state["message"])
-                version = str(body.get("version", ""))
                 if not _build_lock.acquire(blocking=False):
-                    raise ValueError("A build is already in progress.")
+                    raise ValueError("A build or draft upload is already in progress.")
                 try:
                     _build_status.update(state="building", message="Preparing release…")
                     def progress(message):
                         _build_status.update(message=message)
-                    if self.path == "/api/publish":
-                        result = release_builder.publish_release(progress)
-                        _build_status.update(state="complete", message="Release published. Installed apps can discover the update.", result=result)
+                    if self.path == "/api/github-draft":
+                        access = github_status(state["source_path"])
+                        if not access.get("enabled"):
+                            raise PermissionError(access.get("message", "Owner GitHub access is required."))
+                        result = github_release.create_github_draft(source_root=Path(state["source_path"]), progress=progress)
+                        _build_status.update(state="complete", message=f"DumDev {result['version']} is saved as an unpublished GitHub draft. Review and publish it manually.", result=result)
                     else:
+                        version = str(body.get("version", ""))
                         result = release_builder.build_release(Path(state["source_path"]), version, progress)
-                        _build_status.update(state="complete", message=f"DumDev {version} is verified and staged. Click Publish to make it available.", result=result)
+                        _build_status.update(state="complete", message=f"DumDev {version} is verified and staged locally.", result=result)
                 except Exception as exc:
                     _build_status.update(state="error", message=str(exc)[:700])
                     raise
@@ -203,6 +220,8 @@ window.DUMDEV_CONSOLE_TOKEN = {token};
                     _build_lock.release()
                 return self._json(200, {"build": dict(_build_status), **inspect_source()})
             return self._json(404, {"error": "Not found."})
+        except PermissionError as exc:
+            return self._json(403, {"error": str(exc)})
         except (ValueError, TypeError, json.JSONDecodeError) as exc:
             return self._json(400, {"error": str(exc)})
         except Exception as exc:
