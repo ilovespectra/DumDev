@@ -14,7 +14,7 @@
     <div class="field"><label for="sourcePath">Local DumDev source folder</label><input id="sourcePath" autocomplete="off" placeholder="The twitter-agent Git repository"><span class="tiny">This is the actual bot source, not a separate writing-only prototype. Commit changes before building; private settings, logs, and browser profiles are excluded.</span></div>
     <div class="actions"><button id="saveSource">Use this source</button><button id="refresh">Refresh status</button></div><div id="sourceStatus" class="status" role="status" aria-live="polite">Checking local source…</div>
   </section>
-  <section class="card" aria-labelledby="buildTitle"><div class="row"><div><div class="eyebrow">Step 2</div><h2 id="buildTitle">Build and stage a release</h2></div><span class="badge">LOCAL ONLY</span></div>
+  <section class="card" aria-labelledby="buildTitle"><div class="row"><div><div class="eyebrow">Step 2</div><h2 id="buildTitle">Build and stage a release</h2></div><span class="badge">LOCAL BUILD · OWNER DRAFT</span></div>
     <div class="grid" style="margin-top:18px"><div><div class="tiny">Current version</div><div id="currentVersion" class="metric">—</div></div><div><div class="tiny">Next version</div><div id="nextVersion" class="metric">—</div></div></div>
     <div class="field"><label for="version">Release version</label><input id="version" placeholder="0.1.0"></div>
     <div class="actions"><button class="primary" id="build" disabled>Build macOS package</button><button id="githubDraft" class="hidden" disabled>Create GitHub draft</button></div>

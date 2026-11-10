@@ -90,7 +90,7 @@ def inspect_source(path: str | None = None) -> dict[str, Any]:
     return {"source_path": str(candidate), "ready": ready, "missing": missing,
             "version": version,
             "next_version": release_builder.next_patch(newest) if newest else None,
-            "message": ("Builds use this repository's latest clean commit. Publish deploys the verified binary and update feed to the DumDev website." if ready
+            "message": ("Builds use this repository's latest clean commit. Owner-authenticated GitHub CLI access can create a verified draft; publication stays manual." if ready
                         else "The selected folder is not a complete DumDev app source yet.")}
 
 

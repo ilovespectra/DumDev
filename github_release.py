@@ -71,8 +71,8 @@ def _ollama_notes(release: dict, commit_summary: str) -> str:
     if not notes:
         raise RuntimeError("Ollama returned empty release notes; no GitHub draft was created.")
     # Do not let a model response imply notarization when the signed manifest says otherwise.
-    if not release.get("notarized") and re.search(r"\bnotarized\b", notes, re.I):
-        notes = re.sub(r"\bnotarized\b", "not notarized", notes, flags=re.I)
+    if not release.get("notarized") and re.search(r"(?<!not )\bnotarized\b", notes, re.I):
+        notes = re.sub(r"(?<!not )\bnotarized\b", "not notarized", notes, flags=re.I)
     return notes
 
 
