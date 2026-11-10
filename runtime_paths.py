@@ -8,7 +8,7 @@ DATA_ROOT = Path(os.environ.get("DUMDEV_DATA_DIR",
     str(Path.home() / "Library" / "Application Support" / "DumDev") if PACKAGED else str(ROOT))).expanduser().resolve()
 LOGS = DATA_ROOT / "logs"
 VERSION = "0.3.1"
-UPDATE_URL = "https://dumdev-eight.vercel.app/downloads/dumdev/latest.json"
+UPDATE_URL = "https://dumdev.kolektivkrog.si/downloads/dumdev/latest.json"
 
 
 def python_command(script: str, *arguments: str) -> list[str]:

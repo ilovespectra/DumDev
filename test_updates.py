@@ -3,6 +3,7 @@ import json
 import unittest
 from unittest.mock import patch
 
+import release_tools
 from runtime_paths import UPDATE_URL, python_command
 from update_manager import check_update
 
@@ -16,8 +17,12 @@ class UpdateTests(unittest.TestCase):
 
     def manifest(self, version="99.0.0"):
         return {"version": version,
-                "download_url": f"https://dumdev-eight.vercel.app/downloads/dumdev/DumDev-{version}-macOS-arm64.zip",
+                "download_url": f"{release_tools.PUBLIC_BASE}/downloads/dumdev/DumDev-{version}-macOS-arm64.zip",
                 "sha256": "a" * 64}
+
+    def test_update_feed_and_package_use_the_canonical_domain(self):
+        self.assertEqual(release_tools.PUBLIC_BASE, "https://dumdev.kolektivkrog.si")
+        self.assertEqual(UPDATE_URL, f"{release_tools.PUBLIC_BASE}/downloads/dumdev/latest.json")
 
     def test_new_release_notifies_but_current_version_does_not(self):
         from runtime_paths import VERSION

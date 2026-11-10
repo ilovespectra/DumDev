@@ -19,7 +19,7 @@ from urllib.request import urlopen
 ROOT = Path(__file__).resolve().parent
 RELEASE_DIR = ROOT / "release"
 SITE = ROOT / "dumdev-site"
-PUBLIC_BASE = "https://dumdev-eight.vercel.app"
+PUBLIC_BASE = "https://dumdev.kolektivkrog.si"
 VERSION_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 
 
