@@ -6,6 +6,8 @@
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#0b1018">
   <meta name="description" content="DumDev is a local X automation bot that finds relevant conversations and publishes posts and contextual replies within limits you set.">
+  <link rel="canonical" href="https://dumdev.kolektivkrog.si/">
+  <meta property="og:url" content="https://dumdev.kolektivkrog.si/">
   <title>DumDev — Local X automation</title>
   <style>
     :root { color-scheme: dark; --bg:#0b1018; --panel:#111a26; --line:#253449; --text:#eef4fc; --muted:#a8b6c9; --cyan:#72e5d0; --blue:#94b5ff; --warn:#ffcf83; }
@@ -77,10 +79,10 @@
       <aside class="status" aria-label="GitHub release downloads">
         <strong>GitHub release downloads</strong>
         <p id="github-release-status" role="status" aria-live="polite">Counts installer files attached to published releases in the DumDev repository.</p>
-        <a class="release-count-link" id="github-release-count" href="https://github.com/ilovespectra/dumdev/releases" target="_blank" rel="noopener noreferrer">Checking GitHub releases…</a>
+        <a class="release-count-link" id="github-release-count" href="https://github.com/ilovespectra/DumDev/releases" target="_blank" rel="noopener noreferrer">Checking GitHub releases…</a>
       </aside>
     </main>
-    <footer><strong>DumDev is the X bot.</strong> Cruise Control is a separate HeyClicky companion.</footer>
+    <footer><strong>DumDev is the X bot.</strong> <a href="https://github.com/ilovespectra/DumDev" target="_blank" rel="noopener noreferrer" style="color:var(--cyan)">GitHub repository</a> · <a href="https://dumdev.kolektivkrog.si/" style="color:var(--cyan)">DumDev landing page</a>. Cruise Control is a separate HeyClicky companion.</footer>
   </div>
   <script>
     (async () => {
@@ -109,12 +111,37 @@
   <script>
     (async () => {
       const owner = 'ilovespectra';
-      const repo = 'dumdev';
+      const repo = 'DumDev';
       const count = document.getElementById('github-release-count');
       const status = document.getElementById('github-release-status');
       const releasePage = `https://github.com/${owner}/${repo}/releases`;
       count.href = releasePage;
       const format = value => new Intl.NumberFormat().format(value);
+      const cacheKey = `dumdev:${owner}:${repo}:installer-downloads:v1`;
+      const cacheTtlMs = 5 * 60 * 1000;
+      const cacheAge = savedAt => {
+        const minutes = Math.max(0, Math.floor((Date.now() - savedAt) / 60000));
+        return minutes < 1 ? 'under a minute' : `${minutes} min`;
+      };
+      const readCache = () => {
+        try {
+          const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+          if (cached && Number.isSafeInteger(cached.total) && cached.total >= 0
+              && Number.isSafeInteger(cached.installerAssetCount) && cached.installerAssetCount >= 0
+              && Number.isFinite(cached.savedAt) && cached.savedAt > 0 && cached.savedAt <= Date.now()) return cached;
+        } catch {}
+        return null;
+      };
+      const cached = readCache();
+      if (cached && Date.now() - cached.savedAt < cacheTtlMs) {
+        count.textContent = `${format(cached.total)} installer downloads on GitHub`;
+        status.textContent = cached.installerAssetCount
+          ? 'Published DumDev installer-file downloads; not unique users or installs. The separate website update feed is excluded.'
+          : 'No published installer files yet. Drafts and the separate website update feed are not included.';
+        return;
+      }
+      if (cached) count.textContent = `${format(cached.total)} installer downloads on GitHub · refreshing`;
+
       try {
         let total = 0;
         let installerAssetCount = 0;
@@ -129,16 +156,24 @@
               if (!['.dmg', '.pkg', '.zip', '.exe', '.msi', '.appimage', '.deb', '.rpm', '.tar.gz'].some(suffix => (asset.name || '').toLowerCase().endsWith(suffix))) continue;
               if (!Number.isSafeInteger(asset.download_count) || asset.download_count < 0) throw new Error('Invalid asset count');
               total += asset.download_count;
+              if (!Number.isSafeInteger(total)) throw new Error('Installer download total is too large.');
               installerAssetCount += 1;
             }
           }
           if (releases.length < 100) break;
         }
+        try { localStorage.setItem(cacheKey, JSON.stringify({total, installerAssetCount, savedAt:Date.now()})); } catch {}
         count.textContent = `${format(total)} installer downloads on GitHub`;
-        status.textContent = installerAssetCount ? 'Total installer-asset downloads across published DumDev GitHub releases; the separate website update feed is not included.' : 'No published installer files yet. This GitHub count is separate from DumDev’s website update feed.';
+        status.textContent = installerAssetCount
+          ? 'Total downloads of published DumDev installer files; not unique users or installs. The separate website update feed is excluded.'
+          : 'No published installer files yet. Drafts and the separate website update feed are not included.';
       } catch (error) {
-        count.textContent = 'Download count unavailable — view GitHub releases';
-        status.textContent = 'GitHub did not return a complete public release list, so no total is guessed.';
+        count.textContent = cached
+          ? `${format(cached.total)} installer downloads on GitHub · last checked ${cacheAge(cached.savedAt)} ago`
+          : 'Download count unavailable — view GitHub releases';
+        status.textContent = cached
+          ? 'GitHub is temporarily unavailable; this is the last verified installer-file total, not a user or install count.'
+          : 'GitHub did not return a complete public release list, so no total is guessed.';
         console.warn('DumDev GitHub release count failed:', error);
       }
     })();
